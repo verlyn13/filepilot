@@ -38,6 +38,11 @@ See `0000-template.md` for the standard template to use when creating new ADRs.
 | 0001 | Adopt OrbStack as Container Runtime | Accepted | 2025-11-03 |
 | 0002 | Implement Architecture Map as Single Source of Truth | Accepted | 2025-11-03 |
 | 0003 | Implement Trace Correlation with x-trace-id | Accepted | 2025-11-03 |
+| 0004 | SwiftUI Singleton Ownership Pattern | Accepted | 2025-11-04 |
+| 0005 | Telemetry Endpoint Routing Architecture | Accepted | 2025-11-04 |
+| 0006 | Git Workflow Integration | Accepted | 2025-11-04 |
+| 0007 | Repository Naming - filepilot | Accepted | 2025-11-04 |
+| **0008** | **Modern Swift Workflow with XcodeGen + mise** | **Accepted** | **2025-11-04** |
 
 ## References
 

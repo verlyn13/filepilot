@@ -15,7 +15,7 @@ This index serves as the single source of truth for all project documentation. A
 | Category | Primary Document | Purpose | Validation Schema |
 |----------|------------------|---------|-------------------|
 | **Architecture Map** | [ARCHITECTURE_MAP.yaml](./ARCHITECTURE_MAP.yaml) | **Single source of architectural truth** | `architecture.schema.json` |
-| **ADR Index** | [docs/decisions/README.md](./docs/decisions/README.md) | Architectural Decision Records (5 ADRs) | N/A |
+| **ADR Index** | [docs/decisions/README.md](./docs/decisions/README.md) | Architectural Decision Records (7 ADRs) | N/A |
 | **Context Initialization** | [scripts/context-init.sh](./scripts/context-init.sh) | Agent session context loading | N/A |
 | **Project Overview** | [plan.md](./plan.md) | Original project specification | `project.schema.json` |
 | **Integration Plan** | [INTEGRATED_PLAN.md](./INTEGRATED_PLAN.md) | Swift + TypeScript integration | `integration.schema.json` |
