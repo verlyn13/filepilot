@@ -519,6 +519,83 @@ This decision represents a significant modernization of the FilePilot developmen
 
 ---
 
-**Last Updated:** 2025-11-04
+## Addendum: Critical Build Cache Issue (2025-11-04)
+
+### Incident
+
+During the Favorites feature implementation (same day as workflow modernization), we encountered a critical issue:
+
+**Symptoms:**
+- `xcodegen generate` succeeded ✓
+- `xcodebuild build` succeeded ✓
+- `** BUILD SUCCEEDED **` message shown ✓
+- App binary created successfully ✓
+- App process launched (visible in ps) ✓
+- **But window didn't appear** ✗
+
+**Initial False Assumptions:**
+1. Thought it was a SwiftUI initialization error
+2. Checked for missing view components
+3. Assumed runtime code issues
+
+**Actual Root Cause:**
+**Stale build cache in `~/Library/Developer/Xcode/DerivedData/`**
+
+When `xcodegen generate` creates a new `.xcodeproj` file, the existing compiled Swift modules, object files, and linkage information in DerivedData are based on the OLD project structure. Xcode's incremental build system doesn't detect that the project file was regenerated, so it tries to be "smart" and reuse cached work. This causes a mismatch between the new project structure and old build artifacts.
+
+**The Fix:**
+```bash
+xcodebuild clean
+rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-*
+xcodebuild build
+```
+
+**Permanent Solution Implemented:**
+
+Updated `.mise.toml` so that `mise project:sync` automatically cleans build artifacts:
+
+```toml
+[tasks."project:sync"]
+description = "Sync project after adding/removing files (ALWAYS cleans build artifacts)"
+depends = ["project"]
+run = """
+echo "✓ Project regenerated from project.yml"
+echo "⚠️  Cleaning stale build artifacts (critical after project regeneration)..."
+xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME clean > /dev/null 2>&1 || true
+rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-* 2>/dev/null || true
+echo "✓ Build artifacts cleaned - next build will be from scratch"
+"""
+```
+
+### Documentation Updates
+
+1. **MODERN_SWIFT_WORKFLOW.md** - Added section "⚠️ Critical: Clean Builds After Project Regeneration"
+2. **.claude/SESSION_START.md** - Added issue "App builds but window doesn't appear"
+3. **.claude/config.yaml** - Updated command descriptions with critical warnings
+4. **.mise.toml** - Automated clean build in `project:sync` task
+
+### Lesson for AI Agents
+
+**Rule:** After running `xcodegen generate`, ALWAYS perform a clean build.
+
+**Implementation:** NEVER run `xcodegen generate` directly. ALWAYS use `mise project:sync` which handles this automatically.
+
+**Why This Matters:** Without this knowledge, agents would encounter "silent failures" - builds that succeed but produce broken binaries. This is extremely confusing and wastes development time.
+
+### Validation
+
+After implementing the fix:
+- `mise project:sync` → succeeded
+- `mise build` → succeeded
+- `open FilePilot.app` → **window appeared successfully** ✓
+- Favorites feature working as expected ✓
+
+**Status:** ✅ Issue resolved and prevented for future occurrences
+
+**Trace ID:** `CLEAN-BUILD-LESSON-2025-11-04`
+
+---
+
+**Last Updated:** 2025-11-04 (Addendum added same day)
 **Status:** Active
 **Review Date:** 2025-12-01 (1 month check-in)

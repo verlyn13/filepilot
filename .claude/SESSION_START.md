@@ -287,10 +287,38 @@ brew install xcodegen
 # Regenerate project to auto-discover all files
 mise project:sync
 
-# Clean and rebuild
-mise build:clean
+# Clean and rebuild (mise project:sync already does this)
 mise build
 ```
+
+### Issue: App builds but window doesn't appear ⚠️ CRITICAL
+
+**Symptoms:**
+- `** BUILD SUCCEEDED **` message
+- App process launches (visible in Activity Monitor)
+- No window appears, app seems frozen
+- No crash logs generated
+
+**Root Cause:** Stale build cache in `DerivedData/` after project regeneration. Xcode's incremental build reused old object files that don't match the new project structure.
+
+**Why This Happens:** When `xcodegen generate` creates a new `.xcodeproj`, the existing compiled Swift modules, object files, and linkage info in `~/Library/Developer/Xcode/DerivedData/FilePilot-*/` are based on the OLD project structure. Xcode doesn't detect this mismatch.
+
+**Solution:**
+```bash
+# The CORRECT way (automatic clean):
+mise project:sync  # Already includes clean build!
+
+# Manual fix if needed:
+xcodebuild clean
+rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-*
+mise build
+```
+
+**Prevention:** Our `mise project:sync` task **automatically cleans build artifacts** after regeneration. You don't need to do anything extra.
+
+**For AI Agents:** NEVER run `xcodegen generate` directly. ALWAYS use `mise project:sync` which handles the clean build requirement automatically.
+
+**Lesson Learned (2025-11-04):** This exact issue occurred during Favorites feature implementation. See `MODERN_SWIFT_WORKFLOW.md` section "Critical: Clean Builds After Project Regeneration" for full details.
 
 ### Issue: Container runtime not running
 

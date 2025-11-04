@@ -106,6 +106,61 @@ mise project:sync
 
 ---
 
+## ⚠️ Critical: Clean Builds After Project Regeneration
+
+### Why Clean Builds Are Required
+
+**Problem:** When `xcodegen generate` creates a new `.xcodeproj` file, Xcode's incremental build system may reuse **stale build artifacts** from the old project structure in `DerivedData/`. This causes:
+
+- ✗ App builds successfully but **window doesn't appear**
+- ✗ Runtime initialization failures (silent crashes)
+- ✗ Missing symbols or type mismatches
+- ✗ Confusing "build succeeded but app broken" symptoms
+
+**Root Cause:** Xcode's build cache doesn't detect project file regeneration as a reason to invalidate cached object files, Swift modules, and linkage information.
+
+**Solution:** Our `mise project:sync` task **automatically cleans build artifacts** after regeneration.
+
+### Automatic Protection (Built-in)
+
+```bash
+mise project:sync
+# Internally runs:
+# 1. xcodegen generate
+# 2. xcodebuild clean
+# 3. rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-*
+```
+
+**You don't need to do anything extra** - the workflow is automated. But understanding why is crucial for agents and developers.
+
+### Manual Clean Build (If Needed)
+
+If you manually run `xcodegen generate` instead of `mise project:sync`:
+
+```bash
+# Wrong - will have stale cache:
+xcodegen generate
+xcodebuild build  # ❌ May fail silently
+
+# Correct - clean then build:
+xcodegen generate
+xcodebuild clean  # ✅ Remove stale cache
+xcodebuild build  # ✅ Fresh build
+```
+
+### Lesson Learned (2025-11-04)
+
+During implementation of the Favorites feature, we encountered this exact issue:
+- `xcodegen generate` succeeded
+- `xcodebuild build` succeeded
+- App launched but window was invisible
+- **Fix:** `xcodebuild clean` then rebuild
+- **Prevention:** Updated `mise project:sync` to always clean
+
+**For AI Agents:** After running `xcodegen generate`, ALWAYS perform a clean build. Our mise task does this automatically.
+
+---
+
 ## 📋 Available Commands
 
 ### Via mise

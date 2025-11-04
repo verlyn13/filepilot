@@ -237,7 +237,8 @@ guardrails:
 
 commands:
   # Modern workflow commands (use these!)
-  project_sync: "mise project:sync"  # Regenerate Xcode project from project.yml
+  # CRITICAL: project_sync automatically cleans build artifacts to prevent stale cache issues
+  project_sync: "mise project:sync"  # Regenerate Xcode project from project.yml + clean build cache
   project_validate: "mise project:validate"  # Validate project.yml
   swift_build: "mise build"  # Build app
   swift_build_release: "mise build:release"  # Build for release

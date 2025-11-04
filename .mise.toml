@@ -26,11 +26,18 @@ sources = ["project.yml", "FilePilot/**/*.swift"]
 outputs = ["FilePilot.xcodeproj/project.pbxproj"]
 
 [tasks."project:sync"]
-description = "Sync project after adding/removing files"
+description = "Sync project after adding/removing files (ALWAYS cleans build artifacts)"
 depends = ["project"]
 run = """
 echo "✓ Project regenerated from project.yml"
-echo "✓ Open in Xcode: open FilePilot.xcodeproj"
+echo "⚠️  Cleaning stale build artifacts (critical after project regeneration)..."
+xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME clean > /dev/null 2>&1 || true
+rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-* 2>/dev/null || true
+echo "✓ Build artifacts cleaned - next build will be from scratch"
+echo "✓ Ready to build. Run: mise build"
+echo ""
+echo "Note: Clean build is required because Xcode's incremental build"
+echo "      cache can become stale after project file regeneration."
 """
 
 [tasks."project:validate"]
