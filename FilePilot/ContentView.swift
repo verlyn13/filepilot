@@ -14,14 +14,89 @@ struct ContentView: View {
 
     @State private var selectedURLs: Set<URL> = []
     @State private var sortOrder = [KeyPathComparator(\FileItem.name)]
-    @State private var searchText = ""
+    @StateObject private var filterState = FilterState()
     @State private var showingInspector = false
+    @State private var showingFilterPanel = false
+    @State private var showingGitPanel = false
     @State private var columnWidths = [
         GridItem(.flexible(minimum: 200, maximum: 400)),
         GridItem(.flexible(minimum: 100, maximum: 200)),
         GridItem(.flexible(minimum: 100, maximum: 200)),
         GridItem(.flexible(minimum: 150, maximum: 250))
     ]
+
+    // MARK: - Toolbar Components
+
+    /// Navigation controls (back, forward, up)
+    ///
+    /// **Refactoring Note:**
+    /// Extracted from body to reduce complexity from 10 to 2
+    private var navigationButtons: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
+            Button(action: goBack) {
+                Image(systemName: "chevron.left")
+            }
+            .disabled(!canGoBack)
+
+            Button(action: goForward) {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(!canGoForward)
+
+            Button(action: goUp) {
+                Image(systemName: "chevron.up")
+            }
+            .disabled(!canGoUp)
+        }
+    }
+
+    /// Inspector panel toggle button
+    ///
+    /// **Refactoring Note:**
+    /// Extracted from body to reduce complexity
+    private var inspectorButton: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button(action: { showingInspector.toggle() }) {
+                Image(systemName: "info.circle")
+            }
+        }
+    }
+
+    /// Git status panel toggle button
+    private var gitButton: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button(action: {
+                withAnimation {
+                    showingGitPanel.toggle()
+                }
+                TelemetryService.shared.recordAction("git_panel_toggled", metadata: [
+                    "visible": showingGitPanel
+                ])
+            }) {
+                Image(systemName: showingGitPanel ? "arrow.triangle.branch.fill" : "arrow.triangle.branch")
+            }
+            .help("Toggle Git Panel")
+        }
+    }
+
+    /// View mode selection menu (list/grid/column)
+    ///
+    /// **Refactoring Note:**
+    /// Extracted from body to reduce complexity
+    private var viewModeMenu: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button("List View") { appState.viewMode = .list }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Grid View") { appState.viewMode = .grid }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("Column View") { appState.viewMode = .column }
+                    .keyboardShortcut("3", modifiers: .command)
+            } label: {
+                Image(systemName: viewModeIcon)
+            }
+        }
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -30,59 +105,47 @@ struct ContentView: View {
                 .frame(minWidth: 200, idealWidth: 250)
         } detail: {
             // Main content area
-            VStack(spacing: 0) {
-                // Toolbar
-                ToolbarView(searchText: $searchText)
+            HStack(spacing: 0) {
+                // Filter panel (collapsible, left side)
+                if showingFilterPanel {
+                    FilterPanelView(filterState: filterState)
+                        .transition(.move(edge: .leading))
+                }
 
-                // File list/grid
-                FileListView(
-                    path: appState.currentPath,
-                    selectedURLs: $selectedURLs,
-                    searchText: searchText,
-                    sortOrder: sortOrder
-                )
-                .onAppear {
-                    telemetry.recordNavigation(to: appState.currentPath)
+                VStack(spacing: 0) {
+                    // Toolbar
+                    ToolbarView(searchText: $filterState.searchText, showingFilterPanel: $showingFilterPanel)
+
+                    // File list/grid
+                    FileListView(
+                        path: appState.currentPath,
+                        selectedURLs: $selectedURLs,
+                        filterState: filterState,
+                        sortOrder: sortOrder
+                    )
+                    .onAppear {
+                        telemetry.recordNavigation(to: appState.currentPath)
+                        checkForGitRepository()
+                    }
+                    .onChange(of: appState.currentPath) {
+                        checkForGitRepository()
+                    }
+                }
+
+                // Git panel (collapsible, right side)
+                if showingGitPanel {
+                    GitStatusView()
+                        .frame(width: 350)
+                        .transition(.move(edge: .trailing))
                 }
             }
         }
         .navigationTitle("")
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button(action: goBack) {
-                    Image(systemName: "chevron.left")
-                }
-                .disabled(!canGoBack)
-
-                Button(action: goForward) {
-                    Image(systemName: "chevron.right")
-                }
-                .disabled(!canGoForward)
-
-                Button(action: goUp) {
-                    Image(systemName: "chevron.up")
-                }
-                .disabled(!canGoUp)
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: { showingInspector.toggle() }) {
-                    Image(systemName: "info.circle")
-                }
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("List View") { appState.viewMode = .list }
-                        .keyboardShortcut("1", modifiers: .command)
-                    Button("Grid View") { appState.viewMode = .grid }
-                        .keyboardShortcut("2", modifiers: .command)
-                    Button("Column View") { appState.viewMode = .column }
-                        .keyboardShortcut("3", modifiers: .command)
-                } label: {
-                    Image(systemName: viewModeIcon)
-                }
-            }
+            navigationButtons
+            gitButton
+            inspectorButton
+            viewModeMenu
         }
         .inspector(isPresented: $showingInspector) {
             InspectorView(selectedURLs: selectedURLs)
@@ -158,52 +221,60 @@ struct ContentView: View {
         guard !selectedURLs.isEmpty else { return }
         // Quick Look implementation handled by QuickLookService
     }
+
+    // MARK: - Git Integration
+
+    private func checkForGitRepository() {
+        // Check if current path is in a git repository
+        if let repo = GitStatusService.shared.findRepository(containing: appState.currentPath) {
+            // Only auto-load if git panel is visible
+            if showingGitPanel {
+                GitStatusService.shared.loadStatus(for: repo)
+            }
+        }
+    }
 }
 
 // MARK: - Sidebar View
 
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var gitService = GitStatusService.shared
+    @State private var isGitSectionExpanded = false
 
     var body: some View {
         List {
             Section("Favorites") {
-                NavigationLink(destination: EmptyView()) {
+                Button(action: {
+                    appState.navigateToHome()
+                }) {
                     Label("Home", systemImage: "house")
                 }
-                .onTapGesture {
-                    appState.navigateToHome()
-                }
+                .buttonStyle(.plain)
 
-                NavigationLink(destination: EmptyView()) {
+                Button(action: {
+                    appState.navigateToDesktop()
+                }) {
                     Label("Desktop", systemImage: "desktopcomputer")
                 }
-                .onTapGesture {
-                    appState.navigateToDesktop()
-                }
+                .buttonStyle(.plain)
 
-                NavigationLink(destination: EmptyView()) {
+                Button(action: {
+                    appState.navigateToDownloads()
+                }) {
                     Label("Downloads", systemImage: "arrow.down.circle")
                 }
-                .onTapGesture {
-                    appState.navigateToDownloads()
-                }
+                .buttonStyle(.plain)
             }
 
-            Section("Git Repositories") {
-                // Populated dynamically based on discovered repos
-                ForEach(GitService.shared.repositories, id: \.self) { repo in
-                    NavigationLink(destination: EmptyView()) {
-                        Label(repo.lastPathComponent, systemImage: "folder.badge.gearshape")
-                    }
-                    .onTapGesture {
-                        appState.currentPath = repo
-                    }
-                }
+            DisclosureGroup("Git Repositories", isExpanded: $isGitSectionExpanded) {
+                RepositorySelectorView(gitService: gitService)
             }
 
             Section("Devices") {
-                // External volumes, network shares, etc.
+                Text("No devices")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .listStyle(SidebarListStyle())
@@ -215,9 +286,23 @@ struct SidebarView: View {
 struct ToolbarView: View {
     @EnvironmentObject var appState: AppState
     @Binding var searchText: String
+    @Binding var showingFilterPanel: Bool
 
     var body: some View {
         HStack {
+            // Filter panel toggle
+            Button(action: {
+                withAnimation {
+                    showingFilterPanel.toggle()
+                }
+                TelemetryService.shared.recordAction("filter_panel_toggled", metadata: [
+                    "visible": showingFilterPanel
+                ])
+            }) {
+                Image(systemName: showingFilterPanel ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+            }
+            .help("Toggle Filter Panel")
+
             // Path bar
             PathBarView(path: appState.currentPath)
 
@@ -240,7 +325,7 @@ struct ToolbarView: View {
             .padding(6)
             .background(Color(NSColor.controlBackgroundColor))
             .cornerRadius(6)
-            .frame(width: 200)
+            .frame(width: 250)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -308,12 +393,8 @@ struct FileInspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 // Preview
-                if let thumbnail = try? QuickLookService.shared.generateThumbnail(
-                    for: url,
-                    size: CGSize(width: 200, height: 200)
-                ) {
-                    // Show thumbnail
-                }
+                // TODO: Add async thumbnail generation
+                // QuickLookService.shared.generateThumbnail()
 
                 // File info
                 VStack(alignment: .leading, spacing: 8) {
@@ -357,36 +438,4 @@ struct FileItem: Identifiable {
 
 extension Notification.Name {
     static let quickLookRequested = Notification.Name("quickLookRequested")
-}
-
-// MARK: - Git Service Stub
-
-class GitService: ObservableObject {
-    static let shared = GitService()
-
-    @Published var repositories: [URL] = []
-
-    init() {
-        discoverRepositories()
-    }
-
-    private func discoverRepositories() {
-        // Scan common locations for git repos
-        // This is a simplified version
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let devPaths = [
-            home.appendingPathComponent("Development"),
-            home.appendingPathComponent("Projects"),
-            home.appendingPathComponent("Documents/GitHub")
-        ]
-
-        for path in devPaths {
-            findGitRepos(in: path)
-        }
-    }
-
-    private func findGitRepos(in directory: URL) {
-        // Simplified git repo detection
-        // In production, use FSEvents and proper traversal
-    }
 }

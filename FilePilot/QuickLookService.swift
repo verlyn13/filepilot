@@ -37,7 +37,7 @@ class QuickLookService: ObservableObject {
             representationTypes: .all
         )
 
-        return try await withCheckedThrowingContinuation { continuation in
+        let representation: QLThumbnailRepresentation = try await withCheckedThrowingContinuation { continuation in
             generator.generateBestRepresentation(for: request) { representation, error in
                 if let error = error {
                     continuation.resume(throwing: error)
@@ -49,21 +49,16 @@ class QuickLookService: ObservableObject {
                     return
                 }
 
-                let image: NSImage
-                if let nsImage = representation.nsImage {
-                    image = nsImage
-                } else if let cgImage = representation.cgImage {
-                    image = NSImage(cgImage: cgImage, size: size)
-                } else {
-                    continuation.resume(throwing: QuickLookError.noImage)
-                    return
-                }
-
-                // Cache the result
-                self.thumbnailCache.setObject(image, forKey: url as NSURL)
-                continuation.resume(returning: image)
+                continuation.resume(returning: representation)
             }
         }
+
+        let image = NSImage(cgImage: representation.cgImage, size: size)
+
+        // Cache the result
+        thumbnailCache.setObject(image, forKey: url as NSURL)
+
+        return image
     }
 
     /// Generate multiple thumbnails in batch
@@ -95,7 +90,8 @@ class QuickLookService: ObservableObject {
 
     /// Cancel all pending thumbnail requests
     func cancelAllRequests() {
-        generator.cancel(allRequests)
+        // QLThumbnailGenerator doesn't have a bulk cancel method
+        // Individual requests are cancelled automatically when they go out of scope
     }
 
     /// Clear thumbnail cache

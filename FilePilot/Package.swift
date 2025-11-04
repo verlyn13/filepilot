@@ -20,10 +20,11 @@ let package = Package(
         .target(
             name: "FilePilotCore",
             dependencies: [],
-            path: "Sources/FilePilotCore"),
+            path: ".",
+            exclude: ["FilePilotApp.swift", "Package.swift", "FilePilotTests"]),
         .testTarget(
-            name: "FilePilotCoreTests",
+            name: "FilePilotTests",
             dependencies: ["FilePilotCore"],
-            path: "Tests/FilePilotCoreTests"),
+            path: "FilePilotTests"),
     ]
 )

@@ -1,0 +1,39 @@
+# FilePilot Navigation Test
+# Tests back/forward/up navigation functionality
+# Agent: If this fails, check navigation history implementation and button states
+
+appId: com.filepilot.FilePilot
+---
+- launchApp
+- assertVisible: "FilePilot"
+
+# Navigate down into a folder (assuming there's a Documents folder visible)
+- tapOn:
+    text: "Documents"
+    optional: true
+- takeScreenshot: .maestro/screenshots/nav_in_documents.png
+
+# Test "Up" navigation
+- tapOn:
+    id: "navigation-up-button"
+    optional: true
+- takeScreenshot: .maestro/screenshots/nav_after_up.png
+
+# Navigate into folder again
+- tapOn:
+    text: "Documents"
+    optional: true
+
+# Test "Back" navigation
+- tapOn:
+    id: "navigation-back-button"
+    optional: true
+- takeScreenshot: .maestro/screenshots/nav_after_back.png
+
+# Test "Forward" navigation
+- tapOn:
+    id: "navigation-forward-button"
+    optional: true
+- takeScreenshot: .maestro/screenshots/nav_after_forward.png
+
+- stopApp

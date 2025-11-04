@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://myfiles.dev/schemas/observability.schema.json",
+  "title": "Observability System Schema",
+  "description": "Schema for validating observability system configuration and documentation",
+  "type": "object",
+  "required": ["version", "lastUpdated", "endpoints", "stack", "monitoring"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version"
+    },
+    "lastUpdated": {
+      "type": "string",
+      "format": "date",
+      "description": "Last update date"
+    },
+    "endpoints": {
+      "type": "object",
+      "description": "API endpoints for observability",
+      "properties": {
+        "health": {
+          "type": "object",
+          "required": ["path", "method", "description"],
+          "properties": {
+            "path": {"type": "string"},
+            "method": {"type": "string", "enum": ["GET", "POST", "PUT", "DELETE"]},
+            "description": {"type": "string"},
+            "authentication": {"type": "boolean"},
+            "rateLimit": {"type": "number"}
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "required": ["path", "method"],
+          "properties": {
+            "path": {"type": "string"},
+            "method": {"type": "string"}
+          }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "description": "Observability stack components",
+      "required": ["components"],
+      "properties": {
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "port", "url"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Component name"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["metrics", "tracing", "logging", "visualization", "alerting"],
+                "description": "Component type"
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 65535,
+                "description": "Port number"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Access URL"
+              },
+              "healthCheck": {
+                "type": "string",
+                "format": "uri",
+                "description": "Health check endpoint"
+              },
+              "documentation": {
+                "type": "string",
+                "description": "Link to component documentation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "description": "Monitoring configuration",
+      "required": ["retention", "scrapeInterval"],
+      "properties": {
+        "retention": {
+          "type": "string",
+          "pattern": "^\\d+[hdwm]$",
+          "description": "Data retention period (e.g., 7d, 4w, 1m)"
+        },
+        "scrapeInterval": {
+          "type": "string",
+          "pattern": "^\\d+[sm]$",
+          "description": "Metrics scrape interval (e.g., 15s, 1m)"
+        },
+        "alerting": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "condition", "severity"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "condition": {"type": "string"},
+                  "severity": {
+                    "type": "string",
+                    "enum": ["critical", "warning", "info"]
+                  },
+                  "threshold": {"type": "number"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "integration": {
+      "type": "object",
+      "description": "Integration with development workflow",
+      "properties": {
+        "agentAware": {
+          "type": "boolean",
+          "description": "Whether agents can query observability data"
+        },
+        "developmentCycle": {
+          "type": "boolean",
+          "description": "Integrated into development cycle"
+        },
+        "cicd": {
+          "type": "boolean",
+          "description": "Integrated into CI/CD pipeline"
+        },
+        "preCommitHooks": {
+          "type": "boolean",
+          "description": "Pre-commit validation enabled"
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "description": "Telemetry from monitored applications",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "name": {"type": "string"},
+              "type": {"type": "string", "enum": ["swift", "typescript", "go", "python"]},
+              "endpoint": {"type": "string"},
+              "enabled": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

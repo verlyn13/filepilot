@@ -1,0 +1,685 @@
+# Architecture Map - Single Source of Architectural Truth
+# This file defines the complete system architecture, ownership, and interfaces
+# CRITICAL: Agents MUST read this file on every session start
+# Last Verified: 2025-11-04T05:35:00Z
+
+version: "1.0.0"
+last_verified: "2025-11-04T05:35:00Z"
+verified_by: "claude-code-cli"
+
+# Project Metadata
+project:
+  name: "FilePilot + Agentic Workflow"
+  type: "integrated-development-environment"
+  description: "Swift macOS file manager with TypeScript observability infrastructure"
+  repository: "git@github.com:verlyn13/filepilot.git"
+  license: "MIT"
+
+# Architecture Principles
+principles:
+  - "Observable by default - all actions generate telemetry"
+  - "Agent-first development - agents are primary developers"
+  - "Single source of truth - ARCHITECTURE_MAP.yaml and DOCUMENTATION_INDEX.md"
+  - "Explicit interfaces - all communication between components documented"
+  - "Container runtime: OrbStack (permanent default)"
+  - "No breaking changes without architectural review"
+
+# System Components
+services:
+  filepilot:
+    name: "FilePilot"
+    language: "swift"
+    version: "1.0.0"
+    type: "macos-app"
+    owner: "human-led-development"
+    source_root: "FilePilot/"
+    entrypoint: "FilePilot/FilePilotApp.swift"
+    build_system: "xcodebuild"
+    project_file: "FilePilot.xcodeproj/project.pbxproj"
+
+    responsibilities:
+      - "Native macOS file manager UI"
+      - "Quick Look integration"
+      - "Git operations and status"
+      - "File system operations (copy, move, trash)"
+      - "User interaction handling"
+      - "Telemetry event generation"
+
+    interfaces:
+      outbound:
+        - name: "telemetry_api"
+          protocol: "http"
+          endpoint: "http://localhost:3000/api/swift/telemetry"
+          method: "POST"
+          format: "json"
+          description: "Send app events to observability backend"
+
+        - name: "git_operations"
+          protocol: "shell"
+          description: "Git CLI operations via FileManager"
+
+        - name: "quicklook"
+          protocol: "macos-api"
+          framework: "QuickLook"
+          description: "Native Quick Look integration"
+
+      inbound:
+        - name: "macos_fsevents"
+          protocol: "macos-api"
+          framework: "FSEvents"
+          description: "File system change notifications"
+
+    dependencies:
+      internal: []
+      external:
+        - "macOS 13+"
+        - "SwiftUI"
+        - "Foundation"
+        - "UniformTypeIdentifiers"
+
+    telemetry:
+      events:
+        - "app_launch"
+        - "navigation"
+        - "user_action"
+        - "error"
+        - "git_operation"
+      destination: "agentic-workflow"
+
+    constraints:
+      - "Must maintain macOS native look and feel"
+      - "All file operations must use Trash (not permanent delete)"
+      - "Must send telemetry for all significant actions"
+      - "No blocking operations on main thread"
+
+  agentic-workflow:
+    name: "Agentic Workflow Backend"
+    language: "typescript"
+    version: "1.0.0"
+    type: "observability-server"
+    owner: "agent-led-development"
+    source_root: "agentic-workflow/"
+    entrypoint: "agentic-workflow/src/index.ts"
+    build_system: "bun"
+    runtime: "node-20+"
+
+    responsibilities:
+      - "Receive and process telemetry from Swift app"
+      - "Monitor Swift build status"
+      - "Track test results and coverage"
+      - "Expose metrics in Prometheus format"
+      - "Provide API for agent queries"
+      - "OpenTelemetry instrumentation"
+      - "Health check endpoints"
+      - "Documentation API"
+
+    interfaces:
+      inbound:
+        - name: "telemetry_receiver"
+          protocol: "http"
+          endpoint: "/api/swift/telemetry"
+          method: "POST"
+          format: "json"
+          source: "filepilot"
+
+        - name: "health_check"
+          protocol: "http"
+          endpoint: "/health"
+          method: "GET"
+          format: "json"
+          description: "Server health status"
+
+        - name: "swift_build_api"
+          protocol: "http"
+          endpoints:
+            - "/api/swift/build/status"
+            - "/api/swift/tests/latest"
+            - "/api/swift/metrics"
+          methods: ["GET", "POST"]
+          format: "json"
+
+        - name: "agent_decision_api"
+          protocol: "http"
+          endpoint: "/api/agent/decision"
+          method: "POST"
+          format: "json"
+          description: "Agent decision telemetry"
+
+        - name: "docs_index_api"
+          protocol: "http"
+          endpoint: "/api/docs/index"
+          method: "GET"
+          format: "json"
+          description: "Documentation knowledge graph"
+
+      outbound:
+        - name: "otel_exporter"
+          protocol: "otlp-grpc"
+          endpoint: "localhost:4317"
+          destination: "otel-collector"
+          description: "OpenTelemetry traces, metrics, logs"
+
+        - name: "prometheus_metrics"
+          protocol: "http"
+          endpoint: "/metrics"
+          format: "prometheus"
+          description: "Prometheus scrape endpoint"
+
+    dependencies:
+      internal:
+        - "otel-collector"
+        - "prometheus"
+      external:
+        - "express"
+        - "@opentelemetry/sdk-node"
+        - "pino (logger)"
+        - "joi (validation)"
+
+    telemetry:
+      instrumentation: "automatic"
+      exporters:
+        - "otlp (traces, metrics, logs)"
+        - "prometheus (metrics)"
+      trace_context: "w3c"
+
+    constraints:
+      - "Must expose /health endpoint for monitoring"
+      - "All errors must be logged with context"
+      - "Must use OpenTelemetry SDK for instrumentation"
+      - "API responses must include trace IDs"
+
+  otel-collector:
+    name: "OpenTelemetry Collector"
+    language: "go"
+    version: "0.136.0"
+    type: "telemetry-pipeline"
+    owner: "infrastructure"
+    image: "otel/opentelemetry-collector-contrib:latest"
+    config: "agentic-workflow/observability/otel-collector-config.yaml"
+
+    responsibilities:
+      - "Receive OTLP telemetry"
+      - "Process and enrich telemetry data"
+      - "Route to multiple backends"
+      - "Batch processing for efficiency"
+      - "Tail sampling for traces"
+
+    interfaces:
+      inbound:
+        - name: "otlp_grpc"
+          protocol: "otlp-grpc"
+          port: 4317
+          description: "OTLP over gRPC"
+
+        - name: "otlp_http"
+          protocol: "otlp-http"
+          port: 4318
+          description: "OTLP over HTTP"
+
+        - name: "health_check"
+          protocol: "http"
+          port: 13133
+          endpoint: "/health"
+
+      outbound:
+        - name: "jaeger_traces"
+          protocol: "otlp"
+          endpoint: "jaeger:4317"
+          type: "traces"
+
+        - name: "prometheus_metrics"
+          protocol: "prometheus"
+          port: 8889
+          type: "metrics"
+
+        - name: "debug_output"
+          protocol: "stdout"
+          type: "logs"
+
+    constraints:
+      - "Must use modern OTLP exporters (no deprecated Jaeger exporter)"
+      - "Must expose health check endpoint"
+      - "Configuration must be valid YAML"
+
+  prometheus:
+    name: "Prometheus"
+    language: "go"
+    version: "latest"
+    type: "metrics-storage"
+    owner: "infrastructure"
+    image: "prom/prometheus:latest"
+    config: "agentic-workflow/observability/prometheus.yml"
+
+    responsibilities:
+      - "Scrape metrics from targets"
+      - "Store time-series data"
+      - "Evaluate alert rules"
+      - "Provide PromQL query engine"
+
+    interfaces:
+      inbound:
+        - name: "http_api"
+          protocol: "http"
+          port: 9090
+          endpoints:
+            - "/api/v1/query"
+            - "/api/v1/query_range"
+            - "/-/ready"
+            - "/-/healthy"
+
+        - name: "scrape_targets"
+          protocol: "http"
+          targets:
+            - "localhost:8888"  # OTEL Collector
+            - "localhost:3000/metrics"  # TypeScript Server
+
+      outbound:
+        - name: "alertmanager"
+          protocol: "http"
+          endpoint: "alertmanager:9093"
+          description: "Send alerts"
+
+    constraints:
+      - "Must scrape metrics at regular intervals"
+      - "Must expose ready endpoint for health checks"
+
+  grafana:
+    name: "Grafana"
+    language: "go"
+    version: "latest"
+    type: "visualization"
+    owner: "infrastructure"
+    image: "grafana/grafana:latest"
+    config: "agentic-workflow/observability/grafana-datasources.yaml"
+
+    responsibilities:
+      - "Visualize metrics from Prometheus"
+      - "Display traces from Jaeger"
+      - "Query logs from Loki"
+      - "Provide unified dashboard view"
+
+    interfaces:
+      inbound:
+        - name: "http_ui"
+          protocol: "http"
+          port: 3001
+          credentials: "admin/admin"
+
+        - name: "api"
+          protocol: "http"
+          port: 3001
+          endpoints:
+            - "/api/health"
+            - "/api/dashboards"
+
+      outbound:
+        - name: "prometheus_datasource"
+          protocol: "http"
+          endpoint: "prometheus:9090"
+
+        - name: "jaeger_datasource"
+          protocol: "http"
+          endpoint: "jaeger:16686"
+
+        - name: "loki_datasource"
+          protocol: "http"
+          endpoint: "loki:3100"
+
+    constraints:
+      - "Must have all three datasources configured"
+      - "Must expose health API"
+
+  jaeger:
+    name: "Jaeger"
+    language: "go"
+    version: "latest"
+    type: "tracing-backend"
+    owner: "infrastructure"
+    image: "jaegertracing/all-in-one:latest"
+
+    responsibilities:
+      - "Receive traces from OTEL Collector"
+      - "Store trace data"
+      - "Provide trace search UI"
+      - "Generate service dependency graphs"
+
+    interfaces:
+      inbound:
+        - name: "otlp"
+          protocol: "otlp"
+          port: 4317
+          description: "Receive traces via OTLP"
+
+        - name: "ui"
+          protocol: "http"
+          port: 16686
+          description: "Web UI for trace search"
+
+    constraints:
+      - "Must support OTLP native ingestion"
+
+  loki:
+    name: "Loki"
+    language: "go"
+    version: "latest"
+    type: "log-aggregation"
+    owner: "infrastructure"
+    image: "grafana/loki:latest"
+    config: "agentic-workflow/observability/loki-config.yaml"
+
+    responsibilities:
+      - "Receive logs from Promtail"
+      - "Index logs efficiently"
+      - "Provide LogQL query engine"
+
+    interfaces:
+      inbound:
+        - name: "push_api"
+          protocol: "http"
+          port: 3100
+          endpoint: "/loki/api/v1/push"
+
+        - name: "query_api"
+          protocol: "http"
+          port: 3100
+          endpoint: "/loki/api/v1/query"
+
+        - name: "ready"
+          protocol: "http"
+          port: 3100
+          endpoint: "/ready"
+
+    constraints:
+      - "Must use schema v11 compatibility"
+      - "Must expose ready endpoint"
+
+  alertmanager:
+    name: "AlertManager"
+    language: "go"
+    version: "latest"
+    type: "alert-routing"
+    owner: "infrastructure"
+    image: "prom/alertmanager:latest"
+    config: "agentic-workflow/observability/alertmanager.yml"
+
+    responsibilities:
+      - "Receive alerts from Prometheus"
+      - "Deduplicate and group alerts"
+      - "Route to notification channels"
+
+    interfaces:
+      inbound:
+        - name: "api"
+          protocol: "http"
+          port: 9093
+          endpoints:
+            - "/api/v1/alerts"
+            - "/-/ready"
+
+    constraints:
+      - "Must expose ready endpoint"
+
+  promtail:
+    name: "Promtail"
+    language: "go"
+    version: "latest"
+    type: "log-shipper"
+    owner: "infrastructure"
+    image: "grafana/promtail:latest"
+    config: "agentic-workflow/observability/promtail-config.yaml"
+
+    responsibilities:
+      - "Tail log files"
+      - "Ship logs to Loki"
+      - "Label enrichment"
+
+    interfaces:
+      outbound:
+        - name: "loki_push"
+          protocol: "http"
+          endpoint: "loki:3100/loki/api/v1/push"
+
+    constraints:
+      - "Must watch configured log paths"
+
+# Runtime Infrastructure
+infrastructure:
+  container_runtime:
+    name: "OrbStack"
+    type: "native-macos-containers"
+    version: "latest"
+    context: "orbstack"
+    socket: "unix:///Users/verlyn13/.orbstack/run/docker.sock"
+    performance:
+      startup_time: "1-2s"
+      memory_overhead: "~150 MB"
+      file_io: "near-native APFS"
+    status: "production"
+    verified: "2025-11-03"
+
+  orchestration:
+    tool: "docker-compose"
+    version: "v2"
+    compose_file: "agentic-workflow/observability/docker-compose.yml"
+    override_file: "agentic-workflow/observability/docker-compose.orbstack.override.yml"
+    network: "observability (bridge)"
+
+  development_machine:
+    os: "macOS 15+ (Sequoia)"
+    architecture: "Apple Silicon (ARM64)"
+    tools:
+      - "Xcode 15+"
+      - "Bun 1.0+"
+      - "OrbStack"
+      - "Claude Code CLI"
+
+# Data Flow Paths
+data_flows:
+  swift_telemetry:
+    path:
+      - "FilePilot (Swift)"
+      - "HTTP POST → agentic-workflow:3000/api/swift/telemetry"
+      - "OpenTelemetry instrumentation"
+      - "OTLP → otel-collector:4317"
+      - "otel-collector routes to:"
+      - "  → jaeger:4317 (traces)"
+      - "  → prometheus:8889 (metrics)"
+      - "  → debug output (logs)"
+    trace_context: "w3c"
+    headers:
+      - "x-trace-id: ${uuid}"
+      - "x-agent-id: swift-app"
+
+  agent_decisions:
+    path:
+      - "AI Agent"
+      - "HTTP POST → agentic-workflow:3000/api/agent/decision"
+      - "Logged to Pino logger"
+      - "OpenTelemetry span created"
+      - "OTLP → otel-collector:4317"
+      - "Stored in Jaeger + Prometheus"
+    trace_context: "w3c"
+    headers:
+      - "x-trace-id: ${uuid}"
+      - "x-agent-id: claude-code-cli|codex-cli"
+
+  metrics_collection:
+    path:
+      - "agentic-workflow exposes /metrics"
+      - "Prometheus scrapes every 15s"
+      - "Stored in Prometheus TSDB"
+      - "Queried by Grafana dashboards"
+    format: "prometheus"
+
+# Agent Behavior Rules
+agent_rules:
+  session_start:
+    required_files:
+      - ".claude/SESSION_START.md"
+      - "ARCHITECTURE_MAP.yaml"  # This file
+      - ".claude/AGENTIC_STANDARDS.md"
+      - "DOCUMENTATION_INDEX.md"
+
+    required_checks:
+      - "Verify OrbStack is running: docker ps"
+      - "Check services health: curl http://localhost:3000/health"
+      - "Verify context: docker context ls | grep 'orbstack \\*'"
+      - "Load context summary: ./scripts/context-init.sh"
+
+    actions:
+      - "Read all required files"
+      - "Execute required checks"
+      - "Generate context-summary.json"
+      - "Record session start in telemetry"
+
+  before_code_changes:
+    required_queries:
+      - "GET /api/swift/build/status"
+      - "GET /api/swift/tests/latest"
+      - "GET /api/docs/index"
+
+    validations:
+      - "Build status is not 'failing'"
+      - "Test coverage >= 70%"
+      - "No unresolved architectural conflicts"
+
+    telemetry:
+      - "POST /api/agent/decision with action='code_change'"
+
+  after_code_changes:
+    required_actions:
+      - "Update relevant documentation"
+      - "Update DOCUMENTATION_INDEX.md cross-references"
+      - "Record decision telemetry"
+      - "Verify tests still pass"
+      - "Update last_verified timestamp in ARCHITECTURE_MAP.yaml"
+
+    telemetry:
+      - "POST /api/agent/decision with result='success|failure'"
+
+  guardrails:
+    read_only_paths:
+      - "FilePilot.xcodeproj/project.pbxproj"  # Xcode project file
+      - ".git/**"  # Git internals
+      - "node_modules/**"  # Dependencies
+      - "*.lock"  # Lock files
+
+    restricted_paths:
+      - path: "FilePilot/**"
+        allowed_extensions: [".swift", ".entitlements"]
+        deny_extensions: [".pbxproj", ".xcworkspace"]
+
+      - path: "agentic-workflow/src/observability/**"
+        required_keywords: ["OpenTelemetry", "trace", "span"]
+
+      - path: "agentic-workflow/observability/**"
+        allowed_extensions: [".yaml", ".yml"]
+        validation: "docker compose config must succeed"
+
+    mandatory_patterns:
+      - file: "**/*.swift"
+        must_include: ["import SwiftUI"]
+        context: "Swift files must use SwiftUI"
+
+      - file: "agentic-workflow/src/features/**/routes.ts"
+        must_include: ["express", "Router"]
+        context: "Route files must use Express Router"
+
+# Decision Tracking
+decisions:
+  architectural_decision_records:
+    location: "docs/decisions/"
+    format: "markdown"
+    naming: "YYYYMMDD-decision-title.md"
+    required_sections:
+      - "Status"
+      - "Context"
+      - "Decision"
+      - "Consequences"
+
+    latest:
+      - "20251103-orbstack-migration.md"
+      - "20251103-agentic-standards.md"
+      - "20251103-telemetry-system.md"
+
+  trace_all_decisions:
+    enabled: true
+    endpoint: "/api/agent/decision"
+    format:
+      agent: "claude-code-cli|codex-cli|human"
+      action: "code_change|doc_update|config_change"
+      context: "string"
+      result: "success|failure"
+      trace_id: "uuid"
+
+# Verification & Governance
+verification:
+  architecture_validation:
+    script: "./scripts/validate-architecture.sh"
+    frequency: "on_commit"
+    checks:
+      - "All services defined in ARCHITECTURE_MAP.yaml are documented"
+      - "All interfaces are bidirectionally documented"
+      - "All dependencies are declared"
+      - "Container runtime context is 'orbstack'"
+
+  context_freshness:
+    last_verified: "2025-11-03T18:30:00Z"
+    max_age_hours: 24
+    validation_command: "./scripts/context-init.sh --validate"
+
+  documentation_sync:
+    script: "./scripts/validate-docs.sh"
+    frequency: "on_commit"
+    checks:
+      - "DOCUMENTATION_INDEX.md includes all .md files"
+      - "All cross-references are valid"
+      - "All API endpoints are documented"
+
+  telemetry_coverage:
+    required_coverage: 100
+    validation:
+      - "All Swift user actions emit telemetry"
+      - "All agent decisions recorded"
+      - "All API endpoints instrumented with OpenTelemetry"
+
+# Health & Status
+status:
+  overall: "operational"
+  last_full_validation: "2025-11-03T18:30:00Z"
+  services_operational: 7
+  services_total: 7
+  container_runtime: "orbstack"
+  documentation_current: true
+  telemetry_functional: true
+  agent_integration: "complete"
+
+# Maintenance
+maintenance:
+  update_frequency: "weekly"
+  validation_frequency: "daily"
+  review_frequency: "monthly"
+  responsible: "lead-developer + ai-agents"
+
+  update_triggers:
+    - "New service added"
+    - "Interface changed"
+    - "Dependency updated"
+    - "Architecture decision made"
+    - "Agent behavior modified"
+
+# References
+references:
+  documentation:
+    - "DOCUMENTATION_INDEX.md"
+    - ".claude/AGENTIC_STANDARDS.md"
+    - ".claude/SESSION_START.md"
+    - "ORBSTACK_MIGRATION_PLAN.md"
+
+  apis:
+    - "agentic-workflow/docs/API.md"
+    - "agentic-workflow/docs/OBSERVABILITY.md"
+
+  configurations:
+    - ".claude/config.yaml"
+    - "agentic-workflow/observability/*.yaml"

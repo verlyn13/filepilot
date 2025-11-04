@@ -1,0 +1,222 @@
+{
+  "$schema": "./schemas/cross-reference.schema.json",
+  "version": "1.0.0",
+  "lastUpdated": "2025-11-03",
+  "documents": {
+    "plan.md": {
+      "path": "./plan.md",
+      "type": "specification",
+      "implements": [],
+      "references": ["INTEGRATED_PLAN.md"],
+      "referencedBy": ["INTEGRATED_PLAN.md", "DOCUMENTATION_INDEX.md"],
+      "validatesAgainst": "project.schema.json",
+      "lastValidated": "2025-11-02",
+      "validationStatus": "valid"
+    },
+    "INTEGRATED_PLAN.md": {
+      "path": "./INTEGRATED_PLAN.md",
+      "type": "plan",
+      "implements": ["plan.md"],
+      "references": [
+        "agentic-workflow/README.md",
+        "FilePilot/FilePilotApp.swift",
+        "agentic-workflow/src/features/swift-monitor/service.ts"
+      ],
+      "referencedBy": ["DOCUMENTATION_INDEX.md"],
+      "validatesAgainst": "integration.schema.json",
+      "lastValidated": "2025-11-02",
+      "validationStatus": "valid"
+    },
+    "agentic-workflow/README.md": {
+      "path": "./agentic-workflow/README.md",
+      "type": "documentation",
+      "implements": ["INTEGRATED_PLAN.md"],
+      "references": [
+        "agentic-workflow/docs/API.md",
+        "agentic-workflow/docs/QUICKSTART.md",
+        "agentic-workflow/docs/DEVELOPMENT_PRINCIPLES.md"
+      ],
+      "referencedBy": ["INTEGRATED_PLAN.md", "DOCUMENTATION_INDEX.md"],
+      "validatesAgainst": "development.schema.json",
+      "lastValidated": "2025-11-02",
+      "validationStatus": "valid"
+    },
+    "agentic-workflow/docs/API.md": {
+      "path": "./agentic-workflow/docs/API.md",
+      "type": "reference",
+      "implements": [],
+      "references": [
+        "agentic-workflow/src/features/swift-monitor/routes.ts",
+        "agentic-workflow/src/features/health/routes.ts",
+        "agentic-workflow/src/features/users/routes.ts"
+      ],
+      "referencedBy": ["agentic-workflow/README.md", "DOCUMENTATION_INDEX.md"],
+      "validatesAgainst": "api.schema.json",
+      "lastValidated": "2025-11-02",
+      "validationStatus": "valid"
+    },
+    "agentic-workflow/docs/DEVELOPMENT_PRINCIPLES.md": {
+      "path": "./agentic-workflow/docs/DEVELOPMENT_PRINCIPLES.md",
+      "type": "guide",
+      "implements": [],
+      "references": [],
+      "referencedBy": ["agentic-workflow/README.md", "DOCUMENTATION_INDEX.md"],
+      "validatesAgainst": "principles.schema.json",
+      "lastValidated": "2025-11-02",
+      "validationStatus": "valid"
+    },
+    "agentic-workflow/docs/QUICKSTART.md": {
+      "path": "./agentic-workflow/docs/QUICKSTART.md",
+      "type": "tutorial",
+      "implements": [],
+      "references": [
+        "agentic-workflow/README.md",
+        "agentic-workflow/Makefile"
+      ],
+      "referencedBy": ["agentic-workflow/README.md", "DOCUMENTATION_INDEX.md"],
+      "validatesAgainst": "quickstart.schema.json",
+      "lastValidated": "2025-11-02",
+      "validationStatus": "valid"
+    },
+    "agentic-workflow/CONTRIBUTING.md": {
+      "path": "./agentic-workflow/CONTRIBUTING.md",
+      "type": "guide",
+      "implements": [],
+      "references": ["agentic-workflow/docs/DEVELOPMENT_PRINCIPLES.md"],
+      "referencedBy": ["DOCUMENTATION_INDEX.md"],
+      "validatesAgainst": "contributing.schema.json",
+      "lastValidated": "2025-11-02",
+      "validationStatus": "valid"
+    },
+    "agentic-workflow/docs/OBSERVABILITY.md": {
+      "path": "./agentic-workflow/docs/OBSERVABILITY.md",
+      "type": "guide",
+      "implements": [],
+      "references": [
+        "agentic-workflow/docs/API.md",
+        "agentic-workflow/observability/docker-compose.yml",
+        ".claude/config.yaml"
+      ],
+      "referencedBy": [
+        "DOCUMENTATION_INDEX.md",
+        ".claude/config.yaml"
+      ],
+      "validatesAgainst": "observability.schema.json",
+      "lastValidated": "2025-11-03",
+      "validationStatus": "valid"
+    },
+    "DOCUMENTATION_INDEX.md": {
+      "path": "./DOCUMENTATION_INDEX.md",
+      "type": "index",
+      "implements": [],
+      "references": [
+        "plan.md",
+        "INTEGRATED_PLAN.md",
+        "agentic-workflow/README.md",
+        "agentic-workflow/docs/API.md",
+        "agentic-workflow/docs/OBSERVABILITY.md",
+        "agentic-workflow/docs/DEVELOPMENT_PRINCIPLES.md",
+        "agentic-workflow/docs/QUICKSTART.md",
+        "agentic-workflow/CONTRIBUTING.md",
+        ".claude/config.yaml",
+        "docs/schemas/documentation.schema.json",
+        "docs/schemas/observability.schema.json",
+        "docs/CROSS_REFERENCE_INDEX.json"
+      ],
+      "referencedBy": [],
+      "validatesAgainst": "index.schema.json",
+      "lastValidated": "2025-11-03",
+      "validationStatus": "valid"
+    }
+  },
+  "codeReferences": {
+    "FilePilot/FilePilotApp.swift": {
+      "documents": ["INTEGRATED_PLAN.md"],
+      "apis": ["/api/telemetry"],
+      "relatedFiles": [
+        "FilePilot/ContentView.swift",
+        "FilePilot/AppState.swift"
+      ]
+    },
+    "agentic-workflow/src/index.ts": {
+      "documents": ["agentic-workflow/README.md", "agentic-workflow/docs/API.md"],
+      "apis": ["/health", "/api/users", "/api/swift", "/api/telemetry"],
+      "relatedFiles": [
+        "agentic-workflow/src/features/swift-monitor/routes.ts",
+        "agentic-workflow/src/features/health/routes.ts"
+      ]
+    },
+    "agentic-workflow/src/features/swift-monitor/service.ts": {
+      "documents": ["INTEGRATED_PLAN.md", "agentic-workflow/docs/API.md"],
+      "apis": ["/api/swift/build/status", "/api/swift/tests", "/api/swift/metrics"],
+      "relatedFiles": [
+        "agentic-workflow/src/features/swift-monitor/routes.ts"
+      ]
+    }
+  },
+  "apiEndpoints": {
+    "/health": {
+      "documentation": "agentic-workflow/docs/API.md#health",
+      "implementation": "agentic-workflow/src/features/health/routes.ts",
+      "type": "GET",
+      "category": "monitoring"
+    },
+    "/api/telemetry": {
+      "documentation": "agentic-workflow/docs/API.md#telemetry",
+      "implementation": "agentic-workflow/src/features/swift-monitor/routes.ts",
+      "type": "POST",
+      "category": "observability"
+    },
+    "/api/swift/build/status": {
+      "documentation": "agentic-workflow/docs/API.md#swift-build",
+      "implementation": "agentic-workflow/src/features/swift-monitor/routes.ts",
+      "type": "GET",
+      "category": "monitoring"
+    },
+    "/api/swift/tests": {
+      "documentation": "agentic-workflow/docs/API.md#swift-tests",
+      "implementation": "agentic-workflow/src/features/swift-monitor/routes.ts",
+      "type": "GET",
+      "category": "testing"
+    },
+    "/api/swift/metrics": {
+      "documentation": "agentic-workflow/docs/API.md#swift-metrics",
+      "implementation": "agentic-workflow/src/features/swift-monitor/routes.ts",
+      "type": "GET",
+      "category": "monitoring"
+    }
+  },
+  "brokenLinks": [],
+  "duplicateContent": [],
+  "missingDocumentation": [],
+  "observabilityStack": {
+    "prometheus": {
+      "endpoint": "http://localhost:9090",
+      "documentation": "agentic-workflow/docs/OBSERVABILITY.md#prometheus-metrics"
+    },
+    "grafana": {
+      "endpoint": "http://localhost:3001",
+      "documentation": "agentic-workflow/docs/OBSERVABILITY.md#grafana-dashboards"
+    },
+    "jaeger": {
+      "endpoint": "http://localhost:16686",
+      "documentation": "agentic-workflow/docs/OBSERVABILITY.md#jaeger-tracing"
+    },
+    "loki": {
+      "endpoint": "http://localhost:3100",
+      "documentation": "agentic-workflow/docs/OBSERVABILITY.md#loki-logs"
+    },
+    "alertmanager": {
+      "endpoint": "http://localhost:9093",
+      "documentation": "agentic-workflow/docs/OBSERVABILITY.md#alerting"
+    }
+  },
+  "statistics": {
+    "totalDocuments": 9,
+    "totalCodeFiles": 3,
+    "totalApiEndpoints": 5,
+    "totalCrossReferences": 48,
+    "validationRate": 100,
+    "lastFullScan": "2025-11-03T00:00:00Z"
+  }
+}

@@ -1,1 +1,15 @@
 agentic-workflow/
+
+# Xcode User Data (NEVER COMMIT)
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+
+# Swift Build Artifacts (NEVER COMMIT)
+FilePilot/.build/
+.build/
+
+# Lock files
+*.lock
+!Package.resolved
+

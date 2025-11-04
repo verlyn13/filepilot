@@ -1,0 +1,35 @@
+# FilePilot Filter Panel Test
+# Tests filter panel functionality for file filtering
+# Agent: If this fails, check filter state management and file filtering logic
+
+appId: com.filepilot.FilePilot
+---
+- launchApp
+- assertVisible: "FilePilot"
+
+# Open filter panel
+- tapOn:
+    id: "filter-panel-toggle"
+    optional: true
+- takeScreenshot: .maestro/screenshots/filter_panel_opened.png
+
+# Apply a text filter
+- tapOn:
+    id: "filter-search-field"
+    optional: true
+- inputText: ".swift"
+- takeScreenshot: .maestro/screenshots/filter_swift_files.png
+
+# Clear filter
+- tapOn:
+    id: "filter-clear-button"
+    optional: true
+- takeScreenshot: .maestro/screenshots/filter_cleared.png
+
+# Close filter panel
+- tapOn:
+    id: "filter-panel-toggle"
+    optional: true
+- takeScreenshot: .maestro/screenshots/filter_panel_closed.png
+
+- stopApp

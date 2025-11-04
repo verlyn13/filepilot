@@ -1,0 +1,303 @@
+//
+//  FileManagerExtensionsTests.swift
+//  FilePilotTests
+//
+//  Test suite for FileManager extensions with file operations
+//
+
+import XCTest
+@testable import FilePilotCore
+
+final class FileManagerExtensionsTests: XCTestCase {
+    var fileManager: FileManager!
+    var testDirectory: URL!
+    var testFile: URL!
+
+    override func setUp() async throws {
+        fileManager = FileManager.default
+
+        // Create temporary test directory
+        let tempDir = FileManager.default.temporaryDirectory
+        testDirectory = tempDir.appendingPathComponent("FilePilotTests-\(UUID().uuidString)")
+        try fileManager.createDirectory(at: testDirectory, withIntermediateDirectories: true)
+
+        // Create test file
+        testFile = testDirectory.appendingPathComponent("test-file.txt")
+        try "Test content".write(to: testFile, atomically: true, encoding: .utf8)
+    }
+
+    override func tearDown() async throws {
+        // Clean up test directory
+        if fileManager.fileExists(atPath: testDirectory.path) {
+            try? fileManager.removeItem(at: testDirectory)
+        }
+    }
+
+    // MARK: - File Information Tests
+
+    func testSizeOfFile() throws {
+        let size = fileManager.sizeOfFile(at: testFile)
+        XCTAssertNotNil(size, "File size should not be nil")
+        XCTAssertGreaterThan(size!, 0, "File size should be greater than 0")
+    }
+
+    func testSizeOfNonExistentFile() {
+        let nonExistent = testDirectory.appendingPathComponent("does-not-exist.txt")
+        let size = fileManager.sizeOfFile(at: nonExistent)
+        XCTAssertNil(size, "Size of non-existent file should be nil")
+    }
+
+    func testFormattedFileSize() {
+        let formatted = fileManager.formattedFileSize(1024)
+        XCTAssertTrue(formatted.contains("KB") || formatted.contains("bytes"), "Formatted size should contain unit")
+
+        let largeSizeFormatted = fileManager.formattedFileSize(1024 * 1024 * 5)
+        XCTAssertTrue(largeSizeFormatted.contains("MB"), "Large size should be in MB")
+    }
+
+    func testIsDirectory() {
+        XCTAssertTrue(fileManager.isDirectory(at: testDirectory), "Test directory should be identified as directory")
+        XCTAssertFalse(fileManager.isDirectory(at: testFile), "Test file should not be identified as directory")
+    }
+
+    func testCreationDate() {
+        let creationDate = fileManager.creationDate(for: testFile)
+        XCTAssertNotNil(creationDate, "Creation date should not be nil")
+
+        let now = Date()
+        XCTAssertLessThan(creationDate!, now, "Creation date should be in the past")
+    }
+
+    func testModificationDate() {
+        let modDate = fileManager.modificationDate(for: testFile)
+        XCTAssertNotNil(modDate, "Modification date should not be nil")
+
+        let now = Date()
+        XCTAssertLessThan(modDate!, now, "Modification date should be in the past")
+    }
+
+    // MARK: - Move to Trash Tests
+
+    func testMoveToTrash() throws {
+        let trashedURL = try fileManager.moveToTrash(testFile)
+
+        XCTAssertNotNil(trashedURL, "Trashed URL should not be nil")
+        XCTAssertFalse(fileManager.fileExists(atPath: testFile.path), "Original file should not exist after trashing")
+
+        // Note: Can't easily test "Put Back" functionality without user interaction
+    }
+
+    func testMoveToTrashNonExistentFile() {
+        let nonExistent = testDirectory.appendingPathComponent("does-not-exist.txt")
+
+        XCTAssertThrowsError(try fileManager.moveToTrash(nonExistent)) { error in
+            // Should throw an error for non-existent file
+            XCTAssertNotNil(error)
+        }
+    }
+
+    // MARK: - Copy Tests
+
+    func testCopyItem() throws {
+        let destination = testDirectory.appendingPathComponent("copied-file.txt")
+
+        try fileManager.copyItem(from: testFile, to: destination)
+
+        XCTAssertTrue(fileManager.fileExists(atPath: destination.path), "Copied file should exist")
+        XCTAssertTrue(fileManager.fileExists(atPath: testFile.path), "Original file should still exist")
+
+        let originalContent = try String(contentsOf: testFile)
+        let copiedContent = try String(contentsOf: destination)
+        XCTAssertEqual(originalContent, copiedContent, "Content should be identical")
+    }
+
+    func testCopyItemWithOverwrite() throws {
+        let destination = testDirectory.appendingPathComponent("copied-file.txt")
+
+        // Create destination file first
+        try "Old content".write(to: destination, atomically: true, encoding: .utf8)
+
+        // Copy with overwrite
+        try fileManager.copyItem(from: testFile, to: destination, overwrite: true)
+
+        let content = try String(contentsOf: destination)
+        XCTAssertEqual(content, "Test content", "Content should be from source file")
+    }
+
+    func testCopyItemWithoutOverwrite() throws {
+        let destination = testDirectory.appendingPathComponent("copied-file.txt")
+
+        // Create destination file first
+        try "Old content".write(to: destination, atomically: true, encoding: .utf8)
+
+        // Try to copy without overwrite - should throw error
+        XCTAssertThrowsError(try fileManager.copyItem(from: testFile, to: destination, overwrite: false)) { error in
+            let nsError = error as NSError
+            XCTAssertEqual(nsError.code, NSFileWriteFileExistsError)
+        }
+    }
+
+    // MARK: - Move Tests
+
+    func testMoveItem() throws {
+        let destination = testDirectory.appendingPathComponent("moved-file.txt")
+
+        try fileManager.moveItem(from: testFile, to: destination)
+
+        XCTAssertTrue(fileManager.fileExists(atPath: destination.path), "Moved file should exist at destination")
+        XCTAssertFalse(fileManager.fileExists(atPath: testFile.path), "Original file should not exist after moving")
+
+        let content = try String(contentsOf: destination)
+        XCTAssertEqual(content, "Test content", "Content should be preserved")
+    }
+
+    func testMoveItemWithOverwrite() throws {
+        let destination = testDirectory.appendingPathComponent("moved-file.txt")
+
+        // Create destination file first
+        try "Old content".write(to: destination, atomically: true, encoding: .utf8)
+
+        // Move with overwrite
+        try fileManager.moveItem(from: testFile, to: destination, overwrite: true)
+
+        let content = try String(contentsOf: destination)
+        XCTAssertEqual(content, "Test content", "Content should be from source file")
+    }
+
+    // MARK: - Rename Tests
+
+    func testRenameItem() throws {
+        let newURL = try fileManager.renameItem(at: testFile, to: "renamed-file.txt")
+
+        XCTAssertTrue(fileManager.fileExists(atPath: newURL.path), "Renamed file should exist")
+        XCTAssertFalse(fileManager.fileExists(atPath: testFile.path), "Original file should not exist")
+        XCTAssertEqual(newURL.lastPathComponent, "renamed-file.txt", "New name should match")
+
+        let content = try String(contentsOf: newURL)
+        XCTAssertEqual(content, "Test content", "Content should be preserved")
+    }
+
+    // MARK: - Create Directory Tests
+
+    func testCreateDirectory() throws {
+        let newDir = testDirectory.appendingPathComponent("new-directory")
+
+        try fileManager.createDirectory(at: newDir)
+
+        XCTAssertTrue(fileManager.fileExists(atPath: newDir.path), "Directory should exist")
+        XCTAssertTrue(fileManager.isDirectory(at: newDir), "Should be identified as directory")
+    }
+
+    func testCreateNestedDirectory() throws {
+        let nestedDir = testDirectory.appendingPathComponent("parent/child/grandchild")
+
+        try fileManager.createDirectory(at: nestedDir)
+
+        XCTAssertTrue(fileManager.fileExists(atPath: nestedDir.path), "Nested directory should exist")
+        XCTAssertTrue(fileManager.isDirectory(at: nestedDir), "Should be identified as directory")
+    }
+
+    // MARK: - Duplicate Tests
+
+    func testDuplicateItem() throws {
+        let duplicateURL = try fileManager.duplicateItem(at: testFile)
+
+        XCTAssertTrue(fileManager.fileExists(atPath: duplicateURL.path), "Duplicate should exist")
+        XCTAssertTrue(fileManager.fileExists(atPath: testFile.path), "Original should still exist")
+        XCTAssertTrue(duplicateURL.lastPathComponent.contains("copy"), "Duplicate name should contain 'copy'")
+
+        let originalContent = try String(contentsOf: testFile)
+        let duplicateContent = try String(contentsOf: duplicateURL)
+        XCTAssertEqual(originalContent, duplicateContent, "Content should be identical")
+    }
+
+    func testDuplicateItemMultipleTimes() throws {
+        let first = try fileManager.duplicateItem(at: testFile)
+        let second = try fileManager.duplicateItem(at: testFile)
+        let third = try fileManager.duplicateItem(at: testFile)
+
+        XCTAssertTrue(first.lastPathComponent.contains("copy"), "First duplicate should contain 'copy'")
+        XCTAssertTrue(second.lastPathComponent.contains("copy"), "Second duplicate should contain 'copy'")
+        XCTAssertTrue(third.lastPathComponent.contains("copy"), "Third duplicate should contain 'copy'")
+
+        // All should have unique names
+        let names = Set([first.lastPathComponent, second.lastPathComponent, third.lastPathComponent])
+        XCTAssertEqual(names.count, 3, "All duplicates should have unique names")
+    }
+
+    func testDuplicateFileWithoutExtension() throws {
+        let noExtFile = testDirectory.appendingPathComponent("noextfile")
+        try "Content".write(to: noExtFile, atomically: true, encoding: .utf8)
+
+        let duplicate = try fileManager.duplicateItem(at: noExtFile)
+
+        XCTAssertEqual(duplicate.lastPathComponent, "noextfile copy", "Duplicate without extension should work")
+    }
+
+    // MARK: - Batch Operations Tests
+
+    func testMoveMultipleToTrash() throws {
+        // Create multiple test files
+        let file1 = testDirectory.appendingPathComponent("file1.txt")
+        let file2 = testDirectory.appendingPathComponent("file2.txt")
+        let file3 = testDirectory.appendingPathComponent("file3.txt")
+
+        try "Content 1".write(to: file1, atomically: true, encoding: .utf8)
+        try "Content 2".write(to: file2, atomically: true, encoding: .utf8)
+        try "Content 3".write(to: file3, atomically: true, encoding: .utf8)
+
+        let trashedURLs = try fileManager.moveToTrash([file1, file2, file3])
+
+        XCTAssertEqual(trashedURLs.count, 3, "Should have trashed 3 files")
+        XCTAssertFalse(fileManager.fileExists(atPath: file1.path), "File 1 should be trashed")
+        XCTAssertFalse(fileManager.fileExists(atPath: file2.path), "File 2 should be trashed")
+        XCTAssertFalse(fileManager.fileExists(atPath: file3.path), "File 3 should be trashed")
+    }
+
+    func testMoveMultipleToTrashWithOneFailure() throws {
+        let file1 = testDirectory.appendingPathComponent("file1.txt")
+        let nonExistent = testDirectory.appendingPathComponent("does-not-exist.txt")
+        let file3 = testDirectory.appendingPathComponent("file3.txt")
+
+        try "Content 1".write(to: file1, atomically: true, encoding: .utf8)
+        try "Content 3".write(to: file3, atomically: true, encoding: .utf8)
+
+        // After refactoring, batch trash is fault-tolerant - continues with successful files
+        // This is better UX than failing the entire operation
+        let trashedURLs = fileManager.moveToTrash([file1, nonExistent, file3])
+
+        // Should have trashed the 2 existing files, skipped the non-existent one
+        XCTAssertEqual(trashedURLs.count, 2, "Should trash 2 existing files")
+        XCTAssertFalse(fileManager.fileExists(atPath: file1.path), "File 1 should be trashed")
+        XCTAssertFalse(fileManager.fileExists(atPath: file3.path), "File 3 should be trashed")
+    }
+
+    func testTotalSize() throws {
+        // Create multiple files with known sizes
+        let file1 = testDirectory.appendingPathComponent("file1.txt")
+        let file2 = testDirectory.appendingPathComponent("file2.txt")
+
+        let content1 = String(repeating: "a", count: 100)
+        let content2 = String(repeating: "b", count: 200)
+
+        try content1.write(to: file1, atomically: true, encoding: .utf8)
+        try content2.write(to: file2, atomically: true, encoding: .utf8)
+
+        let totalSize = fileManager.totalSize(of: [file1, file2])
+
+        XCTAssertGreaterThan(totalSize, 0, "Total size should be greater than 0")
+        XCTAssertEqual(totalSize, 300, "Total size should equal sum of file sizes")
+    }
+
+    func testTotalSizeWithNonExistentFiles() {
+        let file1 = testDirectory.appendingPathComponent("exists.txt")
+        let file2 = testDirectory.appendingPathComponent("does-not-exist.txt")
+
+        try? "Content".write(to: file1, atomically: true, encoding: .utf8)
+
+        let totalSize = fileManager.totalSize(of: [file1, file2])
+
+        // Should only count existing file
+        XCTAssertGreaterThan(totalSize, 0, "Should count existing file")
+    }
+}

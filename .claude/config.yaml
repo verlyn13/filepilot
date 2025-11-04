@@ -1,0 +1,227 @@
+# Claude Code CLI Configuration
+# This configuration makes the agent aware of our project structure and observability
+
+version: "1.0"
+project:
+  name: "FilePilot + Agentic Workflow"
+  type: "integrated-development"
+  description: "Swift macOS file manager with TypeScript observability and AI-assisted development"
+
+# Primary documentation sources (single source of truth)
+documentation:
+  index: "./DOCUMENTATION_INDEX.md"
+  schemas:
+    - "./docs/schemas/documentation.schema.json"
+    - "./docs/schemas/api.schema.json"
+    - "./docs/schemas/observability.schema.json"
+  observability_guide: "./agentic-workflow/docs/OBSERVABILITY.md"
+  startup_guide: "./.claude/STARTUP_GUIDE.md"  # REQUIRED READING before any development
+  validation:
+    enabled: true
+    on_commit: true
+    on_agent_access: true
+
+# Development cycle integration
+development:
+  cycle:
+    - name: "planning"
+      docs: ["./plan.md", "./INTEGRATED_PLAN.md"]
+      tools: ["Task", "TodoWrite"]
+    - name: "implementation"
+      docs: ["./agentic-workflow/docs/DEVELOPMENT_PRINCIPLES.md"]
+      tools: ["Edit", "Write", "Read"]
+    - name: "testing"
+      docs: ["./agentic-workflow/docs/API.md"]
+      tools: ["Bash", "Task"]
+    - name: "monitoring"
+      docs: ["./agentic-workflow/README.md"]
+      tools: ["BashOutput", "WebFetch"]
+
+# Observability configuration
+observability:
+  typescript_backend:
+    endpoint: "http://localhost:3000"
+    telemetry_path: "/api/telemetry"
+    metrics_path: "/metrics"
+    health_path: "/health"
+  swift_monitoring:
+    build_status: "/api/swift/build/status"
+    test_results: "/api/swift/tests"
+    code_metrics: "/api/swift/metrics"
+  opentelemetry:
+    enabled: true
+    endpoint: "http://localhost:4317"
+  prometheus:
+    enabled: true
+    endpoint: "http://localhost:9090"
+  grafana:
+    enabled: true
+    endpoint: "http://localhost:3001"
+    credentials: "admin/admin"
+  jaeger:
+    enabled: true
+    endpoint: "http://localhost:16686"
+  loki:
+    enabled: true
+    endpoint: "http://localhost:3100"
+  alertmanager:
+    enabled: true
+    endpoint: "http://localhost:9093"
+
+# AI-assisted development settings
+ai_development:
+  code_review:
+    enabled: true
+    auto_suggest: true
+    patterns:
+      - "security"
+      - "performance"
+      - "best_practices"
+  documentation:
+    auto_update: true
+    validate_references: true
+    check_completeness: true
+  testing:
+    suggest_tests: true
+    coverage_target: 80
+
+# Project structure awareness
+structure:
+  swift_project:
+    root: "./FilePilot"
+    main_file: "./FilePilot/FilePilotApp.swift"
+    project_file: "./FilePilot.xcodeproj/project.pbxproj"
+    build_output: "~/Library/Developer/Xcode/DerivedData/FilePilot-*/Build/Products"
+  typescript_project:
+    root: "./agentic-workflow"
+    main_file: "./agentic-workflow/src/index.ts"
+    config: "./agentic-workflow/tsconfig.json"
+    build_output: "./agentic-workflow/dist"
+
+# Cross-reference system
+cross_references:
+  enabled: true
+  index_file: "./docs/CROSS_REFERENCE_INDEX.json"
+  auto_update: true
+  check_broken_links: true
+
+# Agent-specific behaviors
+agent_behaviors:
+  # CRITICAL: Check environment at session start
+  startup_verification:
+    required: true
+    check_docker_running: true  # Docker commands use OrbStack (default context)
+    verify_services_healthy: true
+    query_initial_metrics: true
+    fail_if_unhealthy: true
+    container_runtime: "orbstack"  # Permanent default (2025-11-03)
+
+    # Context initialization (NEW)
+    load_context: true
+    context_script: "./scripts/context-init.sh"
+    required_files:
+      - ".claude/SESSION_START.md"
+      - "ARCHITECTURE_MAP.yaml"
+      - ".claude/AGENTIC_STANDARDS.md"
+      - "DOCUMENTATION_INDEX.md"
+
+  # Development behaviors
+  proactive_monitoring: true
+  auto_fix_simple_issues: true
+  suggest_improvements: true
+  track_technical_debt: true
+  maintain_documentation: true
+
+  # Observability integration
+  query_observability:
+    before_changes: true
+    check_build_status: true
+    verify_test_coverage: true
+    analyze_complexity: true
+    review_recent_changes: true
+
+  use_telemetry:
+    for_code_review: true
+    for_refactoring_decisions: true
+    for_performance_analysis: true
+
+# Validation rules
+validation:
+  documentation:
+    require_headers: true
+    max_section_depth: 4
+    require_examples: true
+    require_cross_references: true
+  code:
+    require_tests: true
+    require_documentation: true
+    security_checks: true
+  commits:
+    require_conventional: true
+    require_issue_reference: false
+
+# Development commands shortcuts
+# Architectural Guardrails (NEW)
+guardrails:
+  # Read-only paths - agents cannot modify
+  read_only:
+    - "FilePilot.xcodeproj/project.pbxproj"  # Xcode project file
+    - ".git/**"  # Git internals
+    - "node_modules/**"  # Dependencies
+    - "**/*.lock"  # Lock files (package-lock.json, bun.lockb, etc.)
+    - ".claude/context-summary.json"  # Generated file
+
+  # Restricted paths with rules
+  restricted:
+    - path: "FilePilot/**"
+      allowed_extensions: [".swift", ".entitlements", ".plist"]
+      deny_extensions: [".pbxproj", ".xcworkspace"]
+      reason: "Swift source files only, project files managed by Xcode"
+
+    - path: "agentic-workflow/src/observability/**"
+      required_keywords: ["OpenTelemetry", "trace", "span"]
+      reason: "Observability code must use OpenTelemetry"
+
+    - path: "agentic-workflow/observability/**"
+      allowed_extensions: [".yaml", ".yml"]
+      validation_command: "docker compose config -q"
+      reason: "Compose files must be valid YAML"
+
+    - path: "ARCHITECTURE_MAP.yaml"
+      require_review: true
+      must_update_timestamp: true
+      reason: "Critical architectural document"
+
+  # Required patterns in files
+  mandatory_patterns:
+    - pattern: "**/*.swift"
+      must_include: ["import SwiftUI"]
+      exceptions: ["**/Tests/**", "**/Package.swift"]
+
+    - pattern: "agentic-workflow/src/features/**/routes.ts"
+      must_include: ["express", "Router"]
+      reason: "All route files must use Express Router"
+
+  # Pre-commit validations
+  pre_commit:
+    - "Architecture map timestamp updated if ARCHITECTURE_MAP.yaml modified"
+    - "Documentation cross-references validated"
+    - "All TypeScript files formatted with Biome"
+    - "All Swift files compile without errors"
+
+commands:
+  swift_build: "xcodebuild build -project FilePilot.xcodeproj -scheme FilePilot"
+  swift_test: "xcodebuild test -project FilePilot.xcodeproj -scheme FilePilot"
+  ts_dev: "cd agentic-workflow && bun run dev"
+  ts_build: "cd agentic-workflow && bun run build"
+  ts_format: "cd agentic-workflow && bun run format"
+  ts_lint: "cd agentic-workflow && bun run lint"
+  ts_check: "cd agentic-workflow && bun run check"
+  full_test: "make test"
+  monitor: "make dev-swift"
+  context_init: "./scripts/context-init.sh"  # NEW: Load context
+  context_validate: "./scripts/context-init.sh --validate"  # NEW: Validate context
+  observability_start: "cd agentic-workflow/observability && docker compose up -d"
+  observability_stop: "cd agentic-workflow/observability && docker compose down"
+  observability_logs: "cd agentic-workflow/observability && docker compose logs -f"
+  # Note: docker commands use OrbStack runtime (permanent default context)

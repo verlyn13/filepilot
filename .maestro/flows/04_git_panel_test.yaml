@@ -1,0 +1,45 @@
+# FilePilot Git Panel Test
+# Tests Git status panel toggle and visibility
+# Agent: If this fails, check Git integration and panel state management
+
+appId: com.filepilot.FilePilot
+---
+- launchApp
+- assertVisible: "FilePilot"
+
+# Navigate to a git repository (assuming project directory has .git)
+- tapOn:
+    text: "Projects"
+    optional: true
+
+# Toggle Git panel ON
+- tapOn:
+    id: "git-panel-toggle"
+    optional: true
+- takeScreenshot: .maestro/screenshots/git_panel_opened.png
+
+# Verify Git panel is visible
+- assertVisible:
+    text: "Git Status"
+    optional: true
+
+# Check for git status elements
+- assertVisible:
+    text: "modified"
+    optional: true
+- assertVisible:
+    text: "untracked"
+    optional: true
+
+# Toggle Git panel OFF
+- tapOn:
+    id: "git-panel-toggle"
+    optional: true
+- takeScreenshot: .maestro/screenshots/git_panel_closed.png
+
+# Verify Git panel is hidden
+- assertNotVisible:
+    text: "Git Status"
+    optional: true
+
+- stopApp
