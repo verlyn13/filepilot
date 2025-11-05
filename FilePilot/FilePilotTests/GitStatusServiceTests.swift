@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import FilePilotCore
+@testable import FilePilot
 
 final class GitStatusServiceTests: XCTestCase {
     var gitService: GitStatusService!

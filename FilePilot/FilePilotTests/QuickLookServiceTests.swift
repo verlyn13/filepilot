@@ -7,7 +7,7 @@
 
 import XCTest
 import AppKit
-@testable import FilePilotCore
+@testable import FilePilot
 
 @MainActor
 final class QuickLookServiceTests: XCTestCase {

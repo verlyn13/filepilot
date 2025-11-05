@@ -7,7 +7,7 @@
 
 import XCTest
 import Combine
-@testable import FilePilotCore
+@testable import FilePilot
 
 final class AppStateTests: XCTestCase {
     var appState: AppState!
