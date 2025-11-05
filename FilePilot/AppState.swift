@@ -31,6 +31,13 @@ class AppState: ObservableObject {
     @Published var showGoToPath = false
     @Published var showCommitDialog = false
 
+    // Favorites related
+    private let favoritesManager = FavoritesManager.shared
+
+    var isCurrentPathFavorited: Bool {
+        favoritesManager.isFavorite(url: currentPath)
+    }
+
     func navigateToHome() {
         currentPath = FileManager.default.homeDirectoryForCurrentUser
         TelemetryService.shared.recordNavigation(to: currentPath)
@@ -90,5 +97,21 @@ class AppState: ObservableObject {
     func openOnGitHub() {
         // Implementation for opening on GitHub
         TelemetryService.shared.recordAction("open_github")
+    }
+
+    func addCurrentPathToFavorites() {
+        let added = favoritesManager.addFavorite(url: currentPath)
+        if added {
+            TelemetryService.shared.recordAction("favorite_added_via_menu", metadata: [
+                "path": currentPath.path
+            ])
+        }
+    }
+
+    func removeCurrentPathFromFavorites() {
+        favoritesManager.removeFavorite(url: currentPath)
+        TelemetryService.shared.recordAction("favorite_removed_via_menu", metadata: [
+            "path": currentPath.path
+        ])
     }
 }

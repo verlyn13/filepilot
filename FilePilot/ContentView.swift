@@ -240,11 +240,13 @@ struct ContentView: View {
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var gitService = GitStatusService.shared
+    @ObservedObject private var favoritesManager = FavoritesManager.shared
     @State private var isGitSectionExpanded = false
 
     var body: some View {
         List {
             Section("Favorites") {
+                // System favorites (always shown)
                 Button(action: {
                     appState.navigateToHome()
                 }) {
@@ -265,6 +267,50 @@ struct SidebarView: View {
                     Label("Downloads", systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(.plain)
+
+                // User-defined favorites
+                if !favoritesManager.favorites.isEmpty {
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    ForEach(favoritesManager.favorites) { favorite in
+                        Button(action: {
+                            appState.navigateTo(url: favorite.url)
+                        }) {
+                            Label(favorite.name, systemImage: favorite.iconName)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Remove from Favorites") {
+                                favoritesManager.removeFavorite(id: favorite.id)
+                            }
+
+                            Button("Rename...") {
+                                // TODO: Show rename dialog
+                            }
+
+                            Divider()
+
+                            Button("Show in Finder") {
+                                NSWorkspace.shared.selectFile(favorite.url.path, inFileViewerRootedAtPath: "")
+                            }
+                        }
+                    }
+                    .onMove { source, destination in
+                        favoritesManager.moveFavorites(from: source, to: destination)
+                    }
+                }
+
+                Divider()
+
+                // Add current path to favorites button
+                Button(action: {
+                    addCurrentPathToFavorites()
+                }) {
+                    Label("Add Current Location", systemImage: "plus.circle")
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
             }
 
             DisclosureGroup("Git Repositories", isExpanded: $isGitSectionExpanded) {
@@ -278,6 +324,15 @@ struct SidebarView: View {
             }
         }
         .listStyle(SidebarListStyle())
+    }
+
+    private func addCurrentPathToFavorites() {
+        let added = favoritesManager.addFavorite(url: appState.currentPath)
+        if added {
+            TelemetryService.shared.recordAction("favorite_added_from_sidebar", metadata: [
+                "path": appState.currentPath.path
+            ])
+        }
     }
 }
 

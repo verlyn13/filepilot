@@ -1,0 +1,167 @@
+# mise configuration for FilePilot project
+# Manages tools, tasks, and environment for agentic Swift development
+# Last Updated: 2025-11-04
+
+[tools]
+# Swift toolchain managed by Xcode
+# XcodeGen for project generation
+xcodegen = "latest"
+# Bun for TypeScript observability backend
+bun = "latest"
+# Node for compatibility
+node = "24"
+
+[env]
+PROJECT_NAME = "FilePilot"
+ENVIRONMENT = "development"
+TELEMETRY_ENDPOINT = "http://localhost:3000/api/swift/telemetry"
+XCODE_PROJECT = "FilePilot.xcodeproj"
+XCODE_SCHEME = "FilePilot"
+
+# Tasks for automated project management
+[tasks.project]
+description = "Regenerate Xcode project from project.yml"
+run = "xcodegen generate"
+sources = ["project.yml", "FilePilot/**/*.swift"]
+outputs = ["FilePilot.xcodeproj/project.pbxproj"]
+
+[tasks."project:sync"]
+description = "Sync project after adding/removing files (ALWAYS cleans build artifacts)"
+depends = ["project"]
+run = """
+echo "✓ Project regenerated from project.yml"
+echo "⚠️  Cleaning stale build artifacts (critical after project regeneration)..."
+xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME clean > /dev/null 2>&1 || true
+rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-* 2>/dev/null || true
+echo "✓ Build artifacts cleaned - next build will be from scratch"
+echo "✓ Ready to build. Run: mise build"
+echo ""
+echo "Note: Clean build is required because Xcode's incremental build"
+echo "      cache can become stale after project file regeneration."
+"""
+
+[tasks."project:validate"]
+description = "Validate project.yml configuration"
+run = "xcodegen generate --spec project.yml --no-generate"
+
+[tasks.build]
+description = "Build FilePilot app"
+run = "xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME -configuration Debug build"
+depends = ["project:sync"]
+
+[tasks."build:release"]
+description = "Build FilePilot for release"
+run = "xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME -configuration Release build"
+depends = ["project:sync"]
+
+[tasks."build:clean"]
+description = "Clean build artifacts"
+run = """
+xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME clean
+rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-*
+"""
+
+[tasks.test]
+description = "Run unit and UI tests"
+run = "xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME test"
+depends = ["project:sync"]
+
+[tasks."test:coverage"]
+description = "Run tests with coverage report"
+run = """
+xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME \
+  -enableCodeCoverage YES \
+  test | xcpretty --color
+"""
+depends = ["project:sync"]
+
+[tasks.run]
+description = "Build and run FilePilot app"
+run = """
+xcodebuild -project $XCODE_PROJECT -scheme $XCODE_SCHEME build
+open -a ~/Library/Developer/Xcode/DerivedData/FilePilot-*/Build/Products/Debug/FilePilot.app
+"""
+depends = ["project:sync"]
+
+[tasks.dev]
+description = "Start full development environment (observability + app)"
+run = [
+  "./scripts/start-dev-environment.sh",
+  "mise run run"
+]
+
+[tasks."observability:start"]
+description = "Start observability stack only"
+run = "cd agentic-workflow && bun run dev"
+
+[tasks."observability:logs"]
+description = "View observability service logs"
+run = "cd agentic-workflow/observability && docker compose logs -f"
+
+[tasks."observability:stop"]
+description = "Stop observability stack"
+run = "cd agentic-workflow/observability && docker compose down"
+
+[tasks."agent:record"]
+description = "Record an agent decision with telemetry"
+run = """
+TRACE_ID=$(uuidgen)
+curl -X POST http://localhost:3000/api/agent/decision \
+  -H "Content-Type: application/json" \
+  -H "x-trace-id: $TRACE_ID" \
+  -d "{\"agent\":\"${AGENT:-manual}\",\"action\":\"${ACTION}\",\"context\":\"${CONTEXT}\",\"result\":\"${RESULT:-success}\",\"trace_id\":\"$TRACE_ID\"}"
+echo "\n✓ Decision recorded with trace ID: $TRACE_ID"
+"""
+
+[tasks."agent:health"]
+description = "Check development environment health"
+run = """
+echo "=== Development Environment Health Check ==="
+echo ""
+echo "Container Runtime:"
+docker ps > /dev/null 2>&1 && echo "  ✓ Docker/OrbStack running" || echo "  ✗ Docker/OrbStack not running"
+echo ""
+echo "Observability Services:"
+curl -sf http://localhost:3000/health > /dev/null && echo "  ✓ TypeScript backend (port 3000)" || echo "  ✗ TypeScript backend not responding"
+curl -sf http://localhost:9090/-/ready > /dev/null && echo "  ✓ Prometheus (port 9090)" || echo "  ✗ Prometheus not ready"
+curl -sf http://localhost:3001/api/health > /dev/null && echo "  ✓ Grafana (port 3001)" || echo "  ✗ Grafana not responding"
+curl -sf http://localhost:16686 > /dev/null && echo "  ✓ Jaeger (port 16686)" || echo "  ✗ Jaeger not responding"
+echo ""
+echo "Xcode Project:"
+[ -f "$XCODE_PROJECT/project.pbxproj" ] && echo "  ✓ Xcode project exists" || echo "  ✗ Run: mise project:sync"
+"""
+
+[tasks.format]
+description = "Format Swift code with swift-format"
+run = """
+find FilePilot -name '*.swift' -not -path '*/.*' -not -path '*/FilePilot/FilePilot/*' \
+  | xargs swift-format format --in-place
+"""
+
+[tasks.lint]
+description = "Lint Swift code with SwiftLint"
+run = "swiftlint lint --config .swiftlint.yml"
+
+[tasks.docs]
+description = "Generate Swift documentation"
+run = """
+swift package generate-documentation \
+  --target FilePilotCore \
+  --output-path ./docs/api
+"""
+
+# Hooks - run automatically on certain events
+[tasks."hooks:post-clone"]
+description = "Run after cloning the repository"
+run = """
+mise install
+mise project:sync
+echo "✓ Project ready! Run: mise dev"
+"""
+
+[tasks."hooks:post-pull"]
+description = "Run after git pull"
+run = """
+mise install
+mise project:sync
+"""

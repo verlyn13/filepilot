@@ -92,6 +92,28 @@ struct FilePilotApp: App {
         }
     }
 
+    /// Favorites menu commands
+    @CommandsBuilder
+    private var favoritesMenuCommands: some Commands {
+        CommandMenu("Favorites") {
+            Button("Add to Favorites") {
+                appState.addCurrentPathToFavorites()
+            }
+            .keyboardShortcut("D", modifiers: [.command])
+
+            Button("Remove from Favorites") {
+                appState.removeCurrentPathFromFavorites()
+            }
+            .disabled(!appState.isCurrentPathFavorited)
+
+            Divider()
+
+            Button("Organize Favorites...") {
+                // TODO: Show favorites management window
+            }
+        }
+    }
+
     /// Git menu commands (Status, Commit, GitHub integration)
     @CommandsBuilder
     private var gitMenuCommands: some Commands {
@@ -137,6 +159,7 @@ struct FilePilotApp: App {
             fileMenuCommands
             viewMenuCommands
             goMenuCommands
+            favoritesMenuCommands
             gitMenuCommands
         }
 

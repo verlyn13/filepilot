@@ -1,15 +1,27 @@
 agentic-workflow/
 
+# Generated Xcode Project (regenerated from project.yml - DO NOT COMMIT)
+FilePilot.xcodeproj/
+*.xcodeproj/
+
 # Xcode User Data (NEVER COMMIT)
 *.xcuserstate
 *.xcuserdatad/
 xcuserdata/
 
+# Xcode Derived Data
+DerivedData/
+~/Library/Developer/Xcode/DerivedData/
+
 # Swift Build Artifacts (NEVER COMMIT)
 FilePilot/.build/
 .build/
+*.swiftpm/
 
 # Lock files
 *.lock
 !Package.resolved
+
+# Backup files
+*.bak
 

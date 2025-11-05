@@ -3,23 +3,29 @@
 **CRITICAL:** This protocol MUST be followed at the start of EVERY development session.
 
 **Container Runtime:** OrbStack (permanent default context)
-**Last Updated:** 2025-11-03
-**Migration Status:** ✅ Complete - All 7 services operational
+**Project System:** XcodeGen + mise (November 2025 workflow)
+**Last Updated:** 2025-11-04
+**Migration Status:** ✅ Complete - Modern workflow operational
 
 ---
 
-## ⚡ Quick Start Checklist
+## ⚡ Quick Start Checklist (Updated for Modern Workflow)
 
 ```bash
 # 1. Verify OrbStack/Docker is running
 docker ps > /dev/null 2>&1 || echo "❌ START ORBSTACK FIRST!"
-# Note: OrbStack is now the default container runtime (10× faster than Docker Desktop)
 
-# 2. Start development environment
-./scripts/start-dev-environment.sh
+# 2. Ensure mise is available
+command -v mise || echo "❌ Install mise first"
 
-# 3. Verify health
-curl -f http://localhost:3000/health
+# 3. Sync Xcode project (if needed)
+mise project:sync
+
+# 4. Start development environment
+mise dev
+
+# 5. Verify health
+mise agent:health
 ```
 
 If all succeed → ✅ Ready for development
@@ -27,7 +33,7 @@ If any fail → ❌ See troubleshooting below
 
 ---
 
-## 📋 Detailed Steps
+## 📋 Detailed Session Start Steps
 
 ### Step 1: Pre-Flight Checks ✈️
 
@@ -35,62 +41,101 @@ If any fail → ❌ See troubleshooting below
 # Check OrbStack/Docker
 if ! docker ps > /dev/null 2>&1; then
   echo "❌ Container runtime not running"
-  echo "Action Required: Start OrbStack (recommended) or Docker Desktop"
-  echo "  macOS with OrbStack: open -a OrbStack"
-  echo "  macOS with Docker Desktop: open -a Docker"
+  echo "Action Required: Start OrbStack (recommended)"
+  echo "  macOS: open -a OrbStack"
   echo "  Wait 10-30 seconds for runtime to fully start"
   exit 1
 fi
 
-# Verify we're using OrbStack for optimal performance
-RUNTIME=$(docker info 2>/dev/null | grep -i "Operating System" | grep -i "OrbStack" && echo "OrbStack" || echo "Docker Desktop")
-echo "✓ Container Runtime: $RUNTIME"
-if [ "$RUNTIME" != "OrbStack" ]; then
-  echo "⚠️  Consider switching to OrbStack for 10× better performance"
-  echo "   See: ORBSTACK_MIGRATION_PLAN.md"
+# Check mise installation
+if ! command -v mise &> /dev/null; then
+  echo "❌ mise not found"
+  echo "Install: brew install mise"
+  exit 1
 fi
 
-# Check required commands
+# Check XcodeGen installation
+if ! command -v xcodegen &> /dev/null; then
+  echo "⚠️  XcodeGen not found"
+  echo "Install: mise install  # or brew install xcodegen"
+fi
+
+# Check required tools
 command -v bun >/dev/null 2>&1 || echo "⚠️  Bun not found (optional)"
 command -v xcodebuild >/dev/null 2>&1 || echo "⚠️  Xcode not found (for Swift dev)"
 ```
 
-### Step 2: Start Environment 🚀
+### Step 2: Initialize Context 🧠
+
+**IMPORTANT:** This loads architectural context from configuration files.
 
 ```bash
-cd /path/to/project/root
+# Initialize project context (reads ARCHITECTURE_MAP.yaml, etc.)
+./scripts/context-init.sh
+
+# Verify context was loaded
+[ -f .claude/context-summary.json ] && echo "✓ Context loaded" || echo "❌ Context init failed"
+```
+
+### Step 3: Sync Xcode Project 🔄
+
+**CRITICAL FOR MODERN WORKFLOW:** Regenerate Xcode project from project.yml
+
+```bash
+# Regenerate Xcode project (auto-discovers all .swift files)
+mise project:sync
+
+# This ensures:
+# - All Swift files are in the project
+# - FavoritesManager.swift is included
+# - Tests are properly configured
+# - No manual .pbxproj editing needed
+```
+
+**When to run:**
+- After git pull
+- After creating new .swift files
+- After modifying project structure
+- At session start (to ensure sync)
+
+### Step 4: Start Environment 🚀
+
+```bash
+# Option A: Full development environment (observability + app)
+mise dev
+
+# Option B: Just start observability stack
+mise observability:start
+
+# Option C: Manual start (traditional)
 ./scripts/start-dev-environment.sh
 ```
 
-**This script:**
-1. Validates all documentation
-2. Starts Docker observability stack
-3. Starts TypeScript server
-4. Displays status URLs
+**Services Started:**
+1. TypeScript observability backend (port 3000)
+2. Prometheus (port 9090)
+3. Grafana (port 3001)
+4. Jaeger (port 16686)
+5. Loki (port 3100)
+6. AlertManager (port 9093)
+7. OTEL Collector (port 4317)
 
 **Expected Duration:** 30-60 seconds
 
-### Step 3: Verify Health ❤️
+### Step 5: Verify Health ❤️
 
 ```bash
-# TypeScript server (CRITICAL)
-curl -f http://localhost:3000/health | jq '.status'
-# Must return: "healthy"
+# Quick health check (all services)
+mise agent:health
 
-# Prometheus (CRITICAL)
-curl -f http://localhost:9090/-/ready
-# Must return: HTTP 200
-
-# Grafana (Important)
-curl -f http://localhost:3001/api/health
-# Should return: {"database":"ok"}
-
-# Jaeger (Important)
-curl -f http://localhost:16686
-# Should return: HTTP 200
+# Individual service checks
+curl -sf http://localhost:3000/health | jq '.status'        # TypeScript backend
+curl -sf http://localhost:9090/-/ready                       # Prometheus
+curl -sf http://localhost:3001/api/health | jq              # Grafana
+curl -sf http://localhost:16686 > /dev/null && echo "OK"    # Jaeger
 ```
 
-### Step 4: Query Initial State 📊
+### Step 6: Query Initial State 📊
 
 ```bash
 # Build status
@@ -104,101 +149,242 @@ echo "Test Coverage: $COVERAGE%"
 # Code complexity
 COMPLEXITY=$(curl -s http://localhost:3000/api/swift/metrics | jq -r '.complexity.average')
 echo "Average Complexity: $COMPLEXITY"
+
+# Knowledge graph
+curl -s http://localhost:3000/api/docs/index | jq '.metadata'
 ```
 
-### Step 5: Agent Decision Tree 🤖
+### Step 7: Record Session Start 📝
 
-```
-BUILD_STATUS == "failed"?
-  → Prioritize fixing build errors
-  → DO NOT suggest new features until build passes
-
-COVERAGE < 70%?
-  → Suggest adding tests before new features
-  → Focus on critical path coverage
-
-COMPLEXITY > 8?
-  → Recommend refactoring before adding complexity
-  → Suggest breaking down large functions
-
-All checks pass?
-  → ✅ Ready for normal development
+```bash
+# Record that agent session has started
+curl -X POST http://localhost:3000/api/agent/session-start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent": "claude-code-cli",
+    "session_id": "'$(date +%Y%m%d-%H%M%S)'",
+    "context_summary": "FilePilot development session",
+    "workflow_version": "modern-2025"
+  }'
 ```
 
 ---
 
-## 🚨 Common Issues
+## 🤖 Agent Decision Tree
+
+```
+mise available?
+  NO → Alert user, request mise installation
+  YES → Continue
+
+OrbStack/Docker running?
+  NO → Alert user, provide start command, STOP
+  YES → Continue
+
+Xcode project in sync?
+  UNKNOWN → Run: mise project:sync
+  YES → Continue
+
+Services healthy?
+  NO → Show failed service, provide logs command, STOP
+  YES → Continue
+
+BUILD_STATUS == "failed"?
+  YES → Prioritize fixing build errors, DO NOT suggest new features
+  NO → Continue
+
+COVERAGE < 70%?
+  YES → Suggest adding tests before new features
+  NO → Continue
+
+COMPLEXITY > 8?
+  YES → Recommend refactoring before adding complexity
+  NO → Continue
+
+All checks pass?
+  → ✅ Full development mode enabled
+```
+
+---
+
+## 🔧 Modern Workflow Commands
+
+### For Adding New Files
+
+```bash
+# 1. Create Swift file
+touch FilePilot/NewFeature.swift
+
+# 2. Regenerate project (auto-includes file)
+mise project:sync
+
+# 3. Done! File is now in Xcode project
+```
+
+**No manual Xcode manipulation needed!**
+
+### For Building & Testing
+
+```bash
+# Build app
+mise build
+
+# Run tests
+mise test
+
+# Run with coverage
+mise test:coverage
+
+# Build and run
+mise run
+```
+
+### For Development
+
+```bash
+# Full dev environment
+mise dev
+
+# Just observability
+mise observability:start
+
+# Health check
+mise agent:health
+
+# Record decision
+export ACTION="code_change" CONTEXT="Added feature X"
+mise agent:record
+```
+
+---
+
+## 🚨 Common Issues (Updated)
+
+### Issue: mise not found
+
+**Solution:**
+```bash
+brew install mise
+# or
+curl https://mise.run | sh
+```
+
+### Issue: XcodeGen not found
+
+**Solution:**
+```bash
+mise install xcodegen
+# or
+brew install xcodegen
+```
+
+### Issue: "Cannot find 'ClassName' in scope"
+
+**Cause:** File exists but not in Xcode project
+
+**Solution:**
+```bash
+# Regenerate project to auto-discover all files
+mise project:sync
+
+# Clean and rebuild (mise project:sync already does this)
+mise build
+```
+
+### Issue: App builds but window doesn't appear ⚠️ CRITICAL
+
+**Symptoms:**
+- `** BUILD SUCCEEDED **` message
+- App process launches (visible in Activity Monitor)
+- No window appears, app seems frozen
+- No crash logs generated
+
+**Root Cause:** Stale build cache in `DerivedData/` after project regeneration. Xcode's incremental build reused old object files that don't match the new project structure.
+
+**Why This Happens:** When `xcodegen generate` creates a new `.xcodeproj`, the existing compiled Swift modules, object files, and linkage info in `~/Library/Developer/Xcode/DerivedData/FilePilot-*/` are based on the OLD project structure. Xcode doesn't detect this mismatch.
+
+**Solution:**
+```bash
+# The CORRECT way (automatic clean):
+mise project:sync  # Already includes clean build!
+
+# Manual fix if needed:
+xcodebuild clean
+rm -rf ~/Library/Developer/Xcode/DerivedData/FilePilot-*
+mise build
+```
+
+**Prevention:** Our `mise project:sync` task **automatically cleans build artifacts** after regeneration. You don't need to do anything extra.
+
+**For AI Agents:** NEVER run `xcodegen generate` directly. ALWAYS use `mise project:sync` which handles the clean build requirement automatically.
+
+**Lesson Learned (2025-11-04):** This exact issue occurred during Favorites feature implementation. See `MODERN_SWIFT_WORKFLOW.md` section "Critical: Clean Builds After Project Regeneration" for full details.
 
 ### Issue: Container runtime not running
 
-**Symptom:**
-```
-Cannot connect to the Docker daemon at unix:///var/run/docker.sock
-```
-
 **Solution:**
 ```bash
-# macOS with OrbStack (recommended - 10× faster)
+# Start OrbStack
 open -a OrbStack
 
-# Wait for OrbStack to start (10-20 seconds)
+# Wait for startup
 sleep 15
 
-# Verify context
-docker context ls  # Should show "orbstack *"
-
-# Verify running
+# Verify
 docker ps
 
-# Retry startup
-./scripts/start-dev-environment.sh
+# Restart environment
+mise dev
 ```
-
-**Note:** OrbStack is now the default runtime for this project. Context is set to `orbstack` permanently.
-All Docker commands automatically use OrbStack. See `.backups/orbstack-validation-complete-2025-11-03.md` for migration details.
 
 ### Issue: Port 3000 already in use
 
-**Symptom:**
-```
-Error: listen EADDRINUSE: address already in use :::3000
-```
-
 **Solution:**
 ```bash
-# Find the process
+# Find and kill process
 lsof -i :3000
-
-# Kill it
 kill -9 <PID>
 
-# Retry startup
-./scripts/start-dev-environment.sh
+# Restart
+mise observability:start
 ```
 
-### Issue: npm install needed
+### Issue: Project out of sync
 
-**Symptom:**
-```
-Cannot find module 'express'
-```
+**Symptoms:** Files in Xcode but not building
 
 **Solution:**
 ```bash
-cd agentic-workflow
-bun install  # or npm install
-cd ..
-./scripts/start-dev-environment.sh
+mise build:clean
+mise project:sync
+mise build
 ```
 
 ---
 
-## 🎯 Agent Behavior Matrix
+## 📚 Required Reading (In Order)
+
+**Session Start:**
+1. **This File** - Session start protocol ✓
+2. **MODERN_SWIFT_WORKFLOW.md** - New workflow guide
+3. **ARCHITECTURE_MAP.yaml** - Architectural truth source
+4. **AGENTIC_STANDARDS.md** - Agent workflows
+
+**Before Making Changes:**
+5. **project.yml** - Project configuration (if modifying structure)
+6. **.mise.toml** - Available commands
+7. **DOCUMENTATION_INDEX.md** - Navigation hub
+
+---
+
+## 🎯 Agent Behavior Matrix (Updated)
 
 | Scenario | Agent Action |
 |----------|-------------|
+| mise not available | Alert user, provide install command, STOP |
 | Docker not running | Alert user, provide start command, STOP |
-| Services not healthy | Show failed service, provide logs command, STOP |
+| Project not synced | Run `mise project:sync`, verify success |
+| Services not healthy | Show failed service, provide logs, STOP |
 | Build failing | Query error details, suggest fixes, PROCEED with caution |
 | Tests failing | Review failures, suggest fixes, PROCEED |
 | Coverage < 70% | Suggest test additions, PROCEED |
@@ -207,38 +393,103 @@ cd ..
 
 ---
 
-## 📚 Read Before Coding
+## ✅ Session Start Complete Checklist
 
-1. **This File** - Session start protocol
-2. **STARTUP_GUIDE.md** - Detailed startup documentation
-3. **OBSERVABILITY.md** - How to query the system
-4. **DOCUMENTATION_INDEX.md** - Where everything is
-5. **config.yaml** - Your agent behaviors
-
----
-
-## ✅ Session Start Complete
-
-Once you've completed all steps and verified health:
+Once you've completed all steps:
 
 ```markdown
-✅ Development Environment Status:
-- Docker: Running
-- TypeScript Server: http://localhost:3000 (healthy)
-- Prometheus: http://localhost:9090 (ready)
-- Grafana: http://localhost:3001 (ok)
-- Jaeger: http://localhost:16686 (ok)
+✅ Pre-Flight Checks:
+- [x] OrbStack/Docker running
+- [x] mise installed and functional
+- [x] XcodeGen available
 
-📊 Initial Metrics:
+✅ Context Initialization:
+- [x] ./scripts/context-init.sh executed
+- [x] .claude/context-summary.json exists
+- [x] ARCHITECTURE_MAP.yaml read
+
+✅ Project Synchronization:
+- [x] mise project:sync completed
+- [x] FilePilot.xcodeproj generated
+- [x] All Swift files auto-discovered
+
+✅ Environment Status:
+- [x] TypeScript Server: http://localhost:3000 (healthy)
+- [x] Prometheus: http://localhost:9090 (ready)
+- [x] Grafana: http://localhost:3001 (ok)
+- [x] Jaeger: http://localhost:16686 (ok)
+
+✅ Initial Metrics:
 - Build Status: success
-- Test Coverage: 82%
-- Code Complexity: 4.2
+- Test Coverage: ≥70%
+- Code Complexity: <8
 
-🎯 Ready for Development!
+✅ Session Recorded:
+- POST /api/agent/session-start completed
+- Trace ID generated
+
+🎯 Status: Ready for Development!
 ```
-
-**You may now proceed with code review, suggestions, and development.**
 
 ---
 
-**REMEMBER:** If environment is not started and healthy, **DO NOT** suggest code changes. Always verify observability first.
+## 📖 Key Differences from Old Workflow
+
+### Old Workflow (❌ Deprecated)
+- Manual `.pbxproj` editing via Xcode GUI
+- Files had to be dragged into Xcode
+- Merge conflicts in project file
+- Agents couldn't add files via CLI
+
+### New Workflow (✅ Current)
+- `project.yml` is single source of truth
+- Files auto-discovered by XcodeGen
+- No merge conflicts
+- Full CLI automation via mise
+- Agents can add files programmatically
+
+### Commands Comparison
+
+| Task | Old | New |
+|------|-----|-----|
+| Add file | Manual in Xcode | `touch file.swift && mise project:sync` |
+| Build | `xcodebuild ...` | `mise build` |
+| Test | `xcodebuild test ...` | `mise test` |
+| Health | Multiple curl commands | `mise agent:health` |
+| Start dev | `./scripts/start-dev-environment.sh` | `mise dev` |
+
+---
+
+## 🔍 Quick Reference Card
+
+**Most Important Commands:**
+```bash
+mise project:sync     # Sync Xcode project
+mise dev              # Start everything
+mise agent:health     # Check environment
+mise build            # Build app
+mise test             # Run tests
+mise agent:record     # Record decision
+make help             # Show all commands
+```
+
+**Files to Know:**
+- `project.yml` - Project configuration
+- `.mise.toml` - Task automation
+- `Makefile` - Command shortcuts
+- `MODERN_SWIFT_WORKFLOW.md` - Workflow guide
+
+---
+
+**REMEMBER:**
+1. **Always** run `mise project:sync` after adding/removing Swift files
+2. **Always** verify environment health before suggesting changes
+3. **Always** record architectural decisions with trace correlation
+4. **Never** manually edit `.xcodeproj/project.pbxproj`
+
+---
+
+**Last Updated:** 2025-11-04
+**Workflow Version:** modern-2025
+**Container Runtime:** OrbStack
+**Project System:** XcodeGen + mise
