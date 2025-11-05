@@ -1,10 +1,21 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 # Context Initialization Script
 # Purpose: Load architectural context for AI agent sessions
 # Usage: ./scripts/context-init.sh [--validate]
 # Exit Codes: 0 = success, 1 = validation failed, 2 = environment error
 
 set -euo pipefail
+
+# Absolute paths for Homebrew tools (required when running via mise)
+JQ="/opt/homebrew/bin/jq"
+YQ="/opt/homebrew/bin/yq"
+
+# Absolute paths for system tools (mise subprocess may have limited PATH)
+# Ensure system tools are accessible
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+DOCKER="/usr/local/bin/docker"
+CURL="/usr/bin/curl"
+DATE="/bin/date"
 
 # Colors for output
 BLUE='\033[0;34m'
@@ -14,7 +25,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Configuration
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="$(cd "$(/usr/bin/dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTEXT_OUTPUT="${PROJECT_ROOT}/.claude/context-summary.json"
 VALIDATE_ONLY=false
 
@@ -31,24 +42,24 @@ echo ""
 echo -e "${BLUE}1. Verifying environment...${NC}"
 
 # Check container runtime
-if ! docker ps > /dev/null 2>&1; then
+if ! $DOCKER ps > /dev/null 2>&1; then
   echo -e "${RED}❌ Container runtime not running${NC}"
   echo -e "${YELLOW}Action: Start OrbStack → open -a OrbStack${NC}"
   exit 2
 fi
 
 # Verify OrbStack context
-CONTEXT=$(docker context show 2>/dev/null || echo "unknown")
+CONTEXT=$($DOCKER context show 2>/dev/null || echo "unknown")
 if [ "$CONTEXT" != "orbstack" ]; then
   echo -e "${YELLOW}⚠️  Docker context is '$CONTEXT', expected 'orbstack'${NC}"
   echo -e "${YELLOW}Setting context to orbstack...${NC}"
-  docker context use orbstack > /dev/null 2>&1
+  $DOCKER context use orbstack > /dev/null 2>&1
 fi
 
 echo -e "${GREEN}✓ Container runtime: OrbStack${NC}"
 
 # Check services health
-if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+if $CURL -sf http://localhost:3000/health > /dev/null 2>&1; then
   echo -e "${GREEN}✓ TypeScript server: healthy${NC}"
 else
   echo -e "${YELLOW}⚠️  TypeScript server not responding${NC}"
@@ -89,10 +100,10 @@ echo ""
 echo -e "${BLUE}3. Extracting context data...${NC}"
 
 # Parse ARCHITECTURE_MAP.yaml
-if command -v yq > /dev/null 2>&1; then
-  ARCH_VERSION=$(yq eval '.version' "${PROJECT_ROOT}/ARCHITECTURE_MAP.yaml")
-  LAST_VERIFIED=$(yq eval '.last_verified' "${PROJECT_ROOT}/ARCHITECTURE_MAP.yaml")
-  SERVICE_COUNT=$(yq eval '.services | length' "${PROJECT_ROOT}/ARCHITECTURE_MAP.yaml")
+if [ -x "$YQ" ]; then
+  ARCH_VERSION=$($YQ eval '.version' "${PROJECT_ROOT}/ARCHITECTURE_MAP.yaml")
+  LAST_VERIFIED=$($YQ eval '.last_verified' "${PROJECT_ROOT}/ARCHITECTURE_MAP.yaml")
+  SERVICE_COUNT=$($YQ eval '.services | length' "${PROJECT_ROOT}/ARCHITECTURE_MAP.yaml")
   echo -e "${GREEN}✓ Architecture version: ${ARCH_VERSION}${NC}"
   echo -e "${GREEN}✓ Last verified: ${LAST_VERIFIED}${NC}"
   echo -e "${GREEN}✓ Services defined: ${SERVICE_COUNT}${NC}"
@@ -104,8 +115,8 @@ else
 fi
 
 # Check architecture freshness
-LAST_VERIFIED_TS=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$LAST_VERIFIED" +%s 2>/dev/null || echo "0")
-CURRENT_TS=$(date +%s)
+LAST_VERIFIED_TS=$($DATE -j -f "%Y-%m-%dT%H:%M:%SZ" "$LAST_VERIFIED" +%s 2>/dev/null || echo "0")
+CURRENT_TS=$($DATE +%s)
 AGE_HOURS=$(( (CURRENT_TS - LAST_VERIFIED_TS) / 3600 ))
 
 if [ $AGE_HOURS -gt 24 ]; then
@@ -141,9 +152,9 @@ echo ""
 echo -e "${BLUE}5. Querying service status...${NC}"
 
 SERVICE_STATUS="{}"
-if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
-  SERVICE_STATUS=$(curl -s http://localhost:3000/health 2>/dev/null || echo '{"status":"unknown"}')
-  HEALTH_STATUS=$(echo "$SERVICE_STATUS" | jq -r '.status' 2>/dev/null || echo "unknown")
+if $CURL -sf http://localhost:3000/health > /dev/null 2>&1; then
+  SERVICE_STATUS=$($CURL -s http://localhost:3000/health 2>/dev/null || echo '{"status":"unknown"}')
+  HEALTH_STATUS=$(echo "$SERVICE_STATUS" | $JQ -r '.status' 2>/dev/null || echo "unknown")
   echo -e "${GREEN}✓ TypeScript server: ${HEALTH_STATUS}${NC}"
 else
   echo -e "${YELLOW}⚠️  TypeScript server: not reachable${NC}"
@@ -152,14 +163,108 @@ fi
 
 # Check observability services
 OBSERVABILITY_STATUS="unknown"
-if curl -sf http://localhost:9090/-/ready > /dev/null 2>&1 && \
-   curl -sf http://localhost:3001/api/health > /dev/null 2>&1 && \
-   curl -sf http://localhost:13133/health > /dev/null 2>&1; then
+if $CURL -sf http://localhost:9090/-/ready > /dev/null 2>&1 && \
+   $CURL -sf http://localhost:3001/api/health > /dev/null 2>&1 && \
+   $CURL -sf http://localhost:13133/health > /dev/null 2>&1; then
   OBSERVABILITY_STATUS="operational"
   echo -e "${GREEN}✓ Observability stack: operational (7/7 services)${NC}"
 else
-  OBSERVABILITY_STATUS="partial"
-  echo -e "${YELLOW}⚠️  Observability stack: partial or offline${NC}"
+OBSERVABILITY_STATUS="partial"
+echo -e "${YELLOW}⚠️  Observability stack: partial or offline${NC}"
+fi
+
+# Decision-support data from TypeScript observability backend (if available)
+SWIFT_BUILD_STATUS="unknown"
+SWIFT_BUILD_WARNINGS=0
+SWIFT_BUILD_ERRORS=0
+SWIFT_COVERAGE="null"
+SWIFT_PASS_RATE="null"
+COMPLEXITY_AVG="null"
+COMPLEXITY_MAX="null"
+SWIFT_FILES="null"
+DOCS_KG_AVAILABLE=false
+DOCS_KG_MD_COUNT=0
+AGENT_STATS_AVAILABLE=false
+AGENT_DECISIONS_TOTAL=0
+AGENT_STATS_SINCE=""
+AGENT_STATS_UNTIL=""
+
+if [ "$HEALTH_STATUS" != "offline" ]; then
+  # Swift build status
+  if BUILD_JSON=$($CURL -s http://localhost:3000/api/swift/build/status 2>/dev/null); then
+    SWIFT_BUILD_STATUS=$(echo "$BUILD_JSON" | $JQ -r '.status' 2>/dev/null || echo "unknown")
+    SWIFT_BUILD_WARNINGS=$(echo "$BUILD_JSON" | $JQ '.warnings | length' 2>/dev/null || echo 0)
+    SWIFT_BUILD_ERRORS=$(echo "$BUILD_JSON" | $JQ '.errors | length' 2>/dev/null || echo 0)
+  fi
+
+  # Swift tests latest (with staleness detection)
+  if TESTS_JSON=$($CURL -s http://localhost:3000/api/swift/tests/latest 2>/dev/null); then
+    TESTS_TOTAL=$(echo "$TESTS_JSON" | $JQ '.total // 0' 2>/dev/null || echo 0)
+    TESTS_TIMESTAMP=$(echo "$TESTS_JSON" | $JQ -r '.timestamp // empty' 2>/dev/null || echo "")
+
+    # Check if data is stale (total=0 or timestamp >1 hour old)
+    DATA_IS_STALE=false
+    if [ "$TESTS_TOTAL" -eq 0 ]; then
+      DATA_IS_STALE=true
+      echo -e "${YELLOW}⚠️  Test data is empty (0 tests recorded)${NC}"
+    elif [ -n "$TESTS_TIMESTAMP" ]; then
+      TESTS_TS=$($DATE -j -f "%Y-%m-%dT%H:%M:%S" "${TESTS_TIMESTAMP:0:19}" +%s 2>/dev/null || echo "0")
+      CURRENT_TS=$($DATE +%s)
+      DATA_AGE_MINS=$(( (CURRENT_TS - TESTS_TS) / 60 ))
+      if [ $DATA_AGE_MINS -gt 60 ]; then
+        DATA_IS_STALE=true
+        echo -e "${YELLOW}⚠️  Test data is ${DATA_AGE_MINS} minutes old${NC}"
+      fi
+    fi
+
+    # Populate observability data if stale
+    if [ "$DATA_IS_STALE" = true ] && [ "$VALIDATE_ONLY" = false ]; then
+      echo -e "${BLUE}🔄 Data is stale, running populate-observability.sh...${NC}"
+      if [ -x "${PROJECT_ROOT}/scripts/populate-observability.sh" ]; then
+        # Run with shorter timeout for context initialization
+        "${PROJECT_ROOT}/scripts/populate-observability.sh" --no-start --timeout 120 --interval 2 2>&1 | grep -E "✓|✅|⚠️|❌" || true
+        # Re-fetch test data after population
+        TESTS_JSON=$($CURL -s http://localhost:3000/api/swift/tests/latest 2>/dev/null || echo '{}')
+      else
+        echo -e "${YELLOW}⚠️  populate-observability.sh not found, skipping refresh${NC}"
+      fi
+    fi
+
+    # Extract final values
+    SWIFT_COVERAGE=$(echo "$TESTS_JSON" | $JQ '.coverage' 2>/dev/null || echo "null")
+    SWIFT_PASS_RATE=$(echo "$TESTS_JSON" | $JQ 'if (.total // 0) > 0 then ((.passed/.total)*100) else null end' 2>/dev/null || echo "null")
+    TESTS_TOTAL=$(echo "$TESTS_JSON" | $JQ '.total // 0' 2>/dev/null || echo 0)
+    TESTS_PASSED=$(echo "$TESTS_JSON" | $JQ '.passed // 0' 2>/dev/null || echo 0)
+
+    if [ "$TESTS_TOTAL" -gt 0 ]; then
+      echo -e "${GREEN}✓ Swift tests: ${TESTS_PASSED}/${TESTS_TOTAL} passing, ${SWIFT_COVERAGE}% coverage${NC}"
+    fi
+  fi
+
+  # Swift metrics
+  if METRICS_JSON=$($CURL -s http://localhost:3000/api/swift/metrics 2>/dev/null); then
+    COMPLEXITY_AVG=$(echo "$METRICS_JSON" | $JQ '.complexity.average' 2>/dev/null || echo "null")
+    COMPLEXITY_MAX=$(echo "$METRICS_JSON" | $JQ '.complexity.max' 2>/dev/null || echo "null")
+    SWIFT_FILES=$(echo "$METRICS_JSON" | $JQ '.files' 2>/dev/null || echo "null")
+  fi
+
+  # Documentation knowledge graph
+  if DOCS_JSON=$($CURL -s http://localhost:3000/api/docs/index 2>/dev/null); then
+    DOCS_KG_AVAILABLE=true
+    DOCS_KG_MD_COUNT=$(echo "$DOCS_JSON" | $JQ '.data.documentation.markdown_files_count // 0' 2>/dev/null || echo 0)
+    # Fallback: if API returns 0 but we locally counted many docs, use local count
+    if [ "${DOCS_KG_MD_COUNT}" = "0" ] && [ "${DOC_COUNT}" -gt 0 ]; then
+      DOCS_KG_MD_COUNT=${DOC_COUNT}
+    fi
+  fi
+
+  # Agent decision stats
+  if STATS_JSON=$($CURL -s http://localhost:3000/api/agent/stats 2>/dev/null); then
+    AGENT_STATS_AVAILABLE=true
+    AGENT_DECISIONS_TOTAL=$(echo "$STATS_JSON" | $JQ '.data.decisions.total // 0' 2>/dev/null || echo 0)
+    AGENT_STATS_SINCE=$(echo "$STATS_JSON" | $JQ -r '.data.time_range.since // empty' 2>/dev/null || echo "")
+    AGENT_STATS_UNTIL=$(echo "$STATS_JSON" | $JQ -r '.data.time_range.until // empty' 2>/dev/null || echo "")
+  fi
 fi
 
 echo ""
@@ -171,7 +276,7 @@ DOC_COUNT=$(find "${PROJECT_ROOT}" -name "*.md" -not -path "*/node_modules/*" -n
 echo -e "${GREEN}✓ Markdown files: ${DOC_COUNT}${NC}"
 
 # Check if documentation index is current
-if grep -q "Last Updated: $(date +%Y-%m-%d)" "${PROJECT_ROOT}/DOCUMENTATION_INDEX.md" 2>/dev/null; then
+if grep -q "Last Updated: $($DATE +%Y-%m-%d)" "${PROJECT_ROOT}/DOCUMENTATION_INDEX.md" 2>/dev/null; then
   echo -e "${GREEN}✓ Documentation index: current${NC}"
   DOC_INDEX_CURRENT="true"
 else
@@ -184,8 +289,8 @@ echo ""
 # Step 7: Generate Context Summary
 echo -e "${BLUE}7. Generating context summary...${NC}"
 
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-SESSION_ID="session-$(date +%Y%m%d-%H%M%S)-$$"
+TIMESTAMP=$($DATE -u +"%Y-%m-%dT%H:%M:%SZ")
+SESSION_ID="session-$($DATE +%Y%m%d-%H%M%S)-$$"
 
 # Build JSON context summary
 cat > "$CONTEXT_OUTPUT" <<EOF
@@ -215,6 +320,47 @@ cat > "$CONTEXT_OUTPUT" <<EOF
     "markdown_files": ${DOC_COUNT},
     "index_current": ${DOC_INDEX_CURRENT},
     "adrs_count": ${ADR_COUNT}
+  },
+  "integrity": {
+    "backend_healthy": $([ "$HEALTH_STATUS" = "healthy" ] && echo true || echo false),
+    "decision_data_populated": $({
+      test "${SWIFT_BUILD_STATUS}" != "unknown" && echo true || {
+        if [ "${SWIFT_COVERAGE}" != "null" ] || [ "${DOCS_KG_AVAILABLE}" = true ] || [ "${AGENT_STATS_AVAILABLE}" = true ]; then echo true; else echo false; fi
+      };
+    }),
+    "live_state_verified": $([ "$HEALTH_STATUS" = "healthy" ] && echo true || echo false)
+  },
+  "decision_support": {
+    "swift": {
+      "build": {
+        "status": "${SWIFT_BUILD_STATUS}",
+        "warnings_count": ${SWIFT_BUILD_WARNINGS},
+        "errors_count": ${SWIFT_BUILD_ERRORS}
+      },
+      "tests": {
+        "total": ${TESTS_TOTAL:-0},
+        "passed": ${TESTS_PASSED:-0},
+        "coverage": ${SWIFT_COVERAGE},
+        "pass_rate": ${SWIFT_PASS_RATE}
+      },
+      "metrics": {
+        "complexity_average": ${COMPLEXITY_AVG},
+        "complexity_max": ${COMPLEXITY_MAX},
+        "files": ${SWIFT_FILES}
+      }
+    },
+    "docs_graph": {
+      "available": ${DOCS_KG_AVAILABLE},
+      "markdown_files_count": ${DOCS_KG_MD_COUNT}
+    },
+    "agent_stats": {
+      "available": ${AGENT_STATS_AVAILABLE},
+      "decisions_total": ${AGENT_DECISIONS_TOTAL},
+      "time_range": {
+        "since": "${AGENT_STATS_SINCE}",
+        "until": "${AGENT_STATS_UNTIL}"
+      }
+    }
   },
   "required_reads": [
     ".claude/SESSION_START.md",
@@ -264,6 +410,32 @@ EOF
 echo -e "${GREEN}✓ Context summary generated: ${CONTEXT_OUTPUT}${NC}"
 echo ""
 
+# Optional: Record agent session start (only in normal mode and when TS server healthy)
+if [ "$VALIDATE_ONLY" = false ] && [ "$HEALTH_STATUS" != "offline" ]; then
+  echo -e "${BLUE}7b. Recording agent session-start...${NC}"
+  read -r -d '' SESSION_PAYLOAD <<PAYLOAD || true
+{
+  "agent": "codex-cli",
+  "session_id": "${SESSION_ID}",
+  "context_summary": {
+    "architecture_version": "${ARCH_VERSION}",
+    "last_verified": "${LAST_VERIFIED}",
+    "swift_build_status": "${SWIFT_BUILD_STATUS}",
+    "swift_coverage": ${SWIFT_COVERAGE},
+    "complexity_average": ${COMPLEXITY_AVG}
+  }
+}
+PAYLOAD
+
+  if $CURL -sf -H 'Content-Type: application/json' \
+    -d "${SESSION_PAYLOAD}" http://localhost:3000/api/agent/session-start > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Session-start recorded with agent backend${NC}"
+  else
+    echo -e "${YELLOW}⚠️  Could not record session-start (agent backend)${NC}"
+  fi
+  echo ""
+fi
+
 # Step 8: Display Summary
 echo -e "${BLUE}8. Context Summary${NC}"
 echo "========================================"
@@ -276,6 +448,21 @@ echo -e "${GREEN}TypeScript Server:${NC} ${HEALTH_STATUS}"
 echo -e "${GREEN}Observability Stack:${NC} ${OBSERVABILITY_STATUS}"
 echo -e "${GREEN}Documentation Files:${NC} ${DOC_COUNT}"
 echo -e "${GREEN}ADRs:${NC} ${ADR_COUNT}"
+if [ "$HEALTH_STATUS" != "offline" ]; then
+  echo -e "${GREEN}Swift Build:${NC} ${SWIFT_BUILD_STATUS} (warn: ${SWIFT_BUILD_WARNINGS}, err: ${SWIFT_BUILD_ERRORS})"
+  if [ "$SWIFT_COVERAGE" != "null" ]; then
+    echo -e "${GREEN}Swift Coverage:${NC} ${SWIFT_COVERAGE}%"
+  fi
+  if [ "$COMPLEXITY_AVG" != "null" ]; then
+    echo -e "${GREEN}Complexity Avg/Max:${NC} ${COMPLEXITY_AVG}/${COMPLEXITY_MAX}"
+  fi
+  if [ "$DOCS_KG_AVAILABLE" = true ]; then
+    echo -e "${GREEN}Docs Graph:${NC} available (markdown files: ${DOCS_KG_MD_COUNT})"
+  fi
+  if [ "$AGENT_STATS_AVAILABLE" = true ]; then
+    echo -e "${GREEN}Agent Decisions (24h):${NC} ${AGENT_DECISIONS_TOTAL}"
+  fi
+fi
 echo ""
 
 # Step 9: Validation
@@ -312,8 +499,8 @@ fi
 echo -e "${GREEN}✅ Context initialization complete${NC}"
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
-echo "1. Read context summary: cat ${CONTEXT_OUTPUT} | jq"
-echo "2. Verify service health: curl http://localhost:3000/health"
+echo "1. Read context summary: cat ${CONTEXT_OUTPUT} | $JQ"
+echo "2. Verify service health: $CURL http://localhost:3000/health"
 echo "3. Review architecture: cat ARCHITECTURE_MAP.yaml"
 echo ""
 echo -e "${BLUE}Agent-ready files:${NC}"
